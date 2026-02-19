@@ -255,6 +255,26 @@ function exportDraftAsMarkdown() {
   showModeTip("已导出 Markdown 笔记");
 }
 
+function renderRichContent(element, text) {
+  if (!element) return;
+  element.innerHTML = marked.parse(text || "");
+  if (typeof window.renderMathInElement === "function") {
+    window.renderMathInElement(element, {
+      delimiters: [
+        { left: "$$", right: "$$", display: true },
+        { left: "\\[", right: "\\]", display: true },
+        { left: "$", right: "$", display: false },
+        { left: "\\(", right: "\\)", display: false },
+      ],
+      throwOnError: false,
+      ignoredTags: ["script", "noscript", "style", "textarea", "pre", "code"],
+    });
+  }
+  element
+    .querySelectorAll("pre code")
+    .forEach((el) => hljs.highlightElement(el));
+}
+
 function appendMsg(text, options = {}) {
   const { role = "assistant", thinking = false, isError = false } = options;
   const article = document.createElement("article");
@@ -275,10 +295,7 @@ function appendMsg(text, options = {}) {
             <div class="skeleton-bar"></div>
           </div>`;
   } else {
-    body.innerHTML = marked.parse(text);
-    body
-      .querySelectorAll("pre code")
-      .forEach((el) => hljs.highlightElement(el));
+    renderRichContent(body, text);
   }
   article.appendChild(avatar);
   article.appendChild(body);
@@ -527,9 +544,7 @@ async function initGreeting() {
       }
     }
     msgBody.classList.remove("typing-active");
-    msgBody
-      .querySelectorAll("pre code")
-      .forEach((el) => hljs.highlightElement(el));
+    renderRichContent(msgBody, fullText);
     conversation.push({ role: "assistant", content: fullText });
   } catch (e) {
     msgBody.classList.add("error-box");
@@ -656,9 +671,7 @@ explainBtn.addEventListener("click", async () => {
     }
 
     msgBody.classList.remove("typing-active");
-    msgBody
-      .querySelectorAll("pre code")
-      .forEach((el) => hljs.highlightElement(el));
+    renderRichContent(msgBody, fullText);
     conversation.push({
       role: "user",
       content: "我上传了一道题目图片，请你完整讲解。",
@@ -741,9 +754,7 @@ askForm.addEventListener("submit", async (e) => {
     }
 
     msgBody.classList.remove("typing-active");
-    msgBody
-      .querySelectorAll("pre code")
-      .forEach((el) => hljs.highlightElement(el));
+    renderRichContent(msgBody, fullText);
     conversation.push({ role: "user", content: q });
     conversation.push({ role: "assistant", content: fullText });
     await summarizeToDraft(q, fullText);
