@@ -52,7 +52,7 @@ const MODEL_CONFIGS = {
   },
   "moonshot-v1-32k": {
     url: "https://api.xiayan.icu/kimi/v1/chat/completions?pwd=haitang000",
-    model: "moonshot-v1-8k",
+    model: "moonshot-v1-32k",
   },
 };
 
@@ -160,9 +160,18 @@ function getProvider() {
   }
 }
 
+function getProxyModelByMode(mode) {
+  const preferred = MODE_DEFAULT_MODEL[mode] || MODE_DEFAULT_MODEL.fast;
+  if (preferred && MODEL_CONFIGS[preferred]) return preferred;
+  if (mode === "thinking" && MODEL_CONFIGS["kimi-2.5"]) return "kimi-2.5";
+  if (MODEL_CONFIGS["kimi-latest"]) return "kimi-latest";
+  return Object.keys(MODEL_CONFIGS)[0] || "";
+}
+
 function getDefaultModelForProvider(provider, mode) {
+  if (provider === "proxy") return getProxyModelByMode(mode);
   const defaults = {
-    proxy: MODE_DEFAULT_MODEL,
+    native_gemini: { fast: "gemini-3-flash", thinking: "gemini-3-flash" },
     native_deepseek: { fast: "deepseek-chat", thinking: "deepseek-reasoner" },
     moonshot: { fast: "moonshot-v1-8k", thinking: "moonshot-v1-32k" },
     openai: { fast: "gpt-4o-mini", thinking: "gpt-4.1" },
@@ -170,12 +179,14 @@ function getDefaultModelForProvider(provider, mode) {
     siliconflow: { fast: "Qwen/Qwen2.5-7B-Instruct", thinking: "deepseek-ai/DeepSeek-R1" },
     custom: { fast: "gpt-4o-mini", thinking: "gpt-4.1" },
   };
-  const map = defaults[provider] || defaults.proxy;
+  const map = defaults[provider] || { fast: "gpt-4o-mini", thinking: "gpt-4.1" };
   return map[mode] || map.fast;
 }
 
 function getProviderBaseUrl(provider) {
   const map = {
+    native_gemini:
+      "https://api.xiayan.icu/gemini/v1/chat/completions?pwd=haitang000",
     native_deepseek:
       "https://api.xiayan.icu/deepseek/v1/chat/completions?pwd=haitang000",
     moonshot: "https://api.moonshot.cn/v1/chat/completions",
@@ -286,9 +297,16 @@ function parseApiError(data, fallback) {
 async function* callModelStream(messages, configKey = syncModelWithMode()) {
   const provider = getProvider();
   const isProxy = provider === "proxy";
-  const noAuthProviders = new Set(["proxy", "native_deepseek"]);
+  const noAuthProviders = new Set([
+    "proxy",
+    "native_deepseek",
+    "native_gemini",
+  ]);
   const requiresApiKey = !noAuthProviders.has(provider);
-  const config = MODEL_CONFIGS[configKey] || MODEL_CONFIGS[MODE_DEFAULT_MODEL.fast];
+  const proxyFallbackKey = getProxyModelByMode(currentMode);
+  const config = MODEL_CONFIGS[configKey] || MODEL_CONFIGS[proxyFallbackKey];
+  if (isProxy && !config)
+    throw new Error("内置代理模型配置缺失，请在设置中切换为可用模型");
   const modelName = isProxy
     ? config.model
     : getConfiguredModeModel(currentMode);
@@ -622,6 +640,16 @@ providerSelect?.addEventListener("change", () => {
     baseUrlInput.value =
       provider === "custom" ? getProviderBaseUrl("custom") : "";
   }
+  if (provider === "proxy") {
+    if (fastModelInput) fastModelInput.value = getProxyModelByMode("fast");
+    if (thinkingModelInput) thinkingModelInput.value = getProxyModelByMode("thinking");
+    return;
+  }
+  if (provider === "native_gemini") {
+    if (fastModelInput) fastModelInput.value = "gemini-2.0-flash";
+    if (thinkingModelInput) thinkingModelInput.value = "gemini-2.5-pro";
+    return;
+  }
   if (provider === "deepseek" || provider === "native_deepseek") {
     if (fastModelInput) fastModelInput.value = "deepseek-chat";
     if (thinkingModelInput) thinkingModelInput.value = "deepseek-reasoner";
@@ -639,11 +667,16 @@ saveApiKeyBtn?.addEventListener("click", () => {
     } else {
       localStorage.removeItem(BASE_URL_STORAGE);
     }
-    const fastModel =
+    let fastModel =
       fastModelInput?.value.trim() || getDefaultModelForProvider(provider, "fast");
-    const thinkingModel =
+    let thinkingModel =
       thinkingModelInput?.value.trim() ||
       getDefaultModelForProvider(provider, "thinking");
+    if (provider === "proxy") {
+      if (!MODEL_CONFIGS[fastModel]) fastModel = getProxyModelByMode("fast");
+      if (!MODEL_CONFIGS[thinkingModel])
+        thinkingModel = getProxyModelByMode("thinking");
+    }
     setConfiguredModeModel("fast", fastModel);
     setConfiguredModeModel("thinking", thinkingModel);
     showModeTip("设置已保存");
@@ -663,8 +696,8 @@ clearApiKeyBtn?.addEventListener("click", () => {
     apiKeyInput.value = "";
     if (providerSelect) providerSelect.value = "proxy";
     if (baseUrlInput) baseUrlInput.value = "";
-    if (fastModelInput) fastModelInput.value = MODE_DEFAULT_MODEL.fast;
-    if (thinkingModelInput) thinkingModelInput.value = MODE_DEFAULT_MODEL.thinking;
+    if (fastModelInput) fastModelInput.value = getProxyModelByMode("fast");
+    if (thinkingModelInput) thinkingModelInput.value = getProxyModelByMode("thinking");
     showModeTip("已清除并恢复默认模型");
   } catch {
     showModeTip("清除失败");
