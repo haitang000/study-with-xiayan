@@ -19,7 +19,7 @@
   <div class="app">
     <aside class="left">
       <div class="left-top">
-        <button class="esc" id="escBtn"><i class="fa-solid fa-xmark"></i><br><small>ESC</small></button>
+        <button class="esc" id="settingsBtn"><i class="fa-solid fa-gear"></i><br><small>设置</small></button>
         <div class="status">
           <div class="status-head">◆ 模式选择</div>
           <div class="config-group">
@@ -28,8 +28,6 @@
               <button type="button" class="mode-btn" data-mode="thinking" data-tip="思考模式：更详细展示推导与分析">思考</button>
             </div>
           </div>
-          <div class="status-bar" style="margin-top: 8px;"><div class="status-fill" id="ctxBar"></div></div>
-          <div class="status-sub" id="ctxText">12.8k</div>
         </div>
       </div>
 
@@ -84,6 +82,36 @@
         <textarea id="draft" placeholder="这里可以记录解题草稿、关键公式和中间结论..."></textarea>
       </div>
     </aside>
+  </div>
+
+  <div class="settings-modal" id="settingsModal" aria-hidden="true">
+    <div class="settings-card">
+      <div class="settings-title">聊天设置</div>
+      <input id="apiKeyInput" type="password" placeholder="请输入你的 Moonshot API Key" autocomplete="off" />
+      <div class="settings-fields">
+        <div class="settings-field">
+          <label for="fastModelSelect">快速模式模型</label>
+          <select id="fastModelSelect">
+            <option value="kimi-latest">Kimi Latest</option>
+            <option value="kimi-2.5">Kimi K2.5</option>
+            <option value="moonshot-v1-32k">Moonshot V1 32K</option>
+          </select>
+        </div>
+        <div class="settings-field">
+          <label for="thinkingModelSelect">思考模式模型</label>
+          <select id="thinkingModelSelect">
+            <option value="kimi-latest">Kimi Latest</option>
+            <option value="kimi-2.5">Kimi K2.5</option>
+            <option value="moonshot-v1-32k">Moonshot V1 32K</option>
+          </select>
+        </div>
+      </div>
+      <div class="settings-actions">
+        <button type="button" id="saveApiKeyBtn">保存</button>
+        <button type="button" id="clearApiKeyBtn" class="ghost">清除</button>
+        <button type="button" id="closeSettingsBtn" class="ghost">关闭</button>
+      </div>
+    </div>
   </div>
 
   <script src="js/main.js"></script>

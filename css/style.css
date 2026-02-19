@@ -482,12 +482,24 @@ body {
 }
 
 .msg-avatar.user {
-  background: linear-gradient(160deg, #8ab1ff, #b3ccff);
-  border-color: #7fa1ea;
-  color: #1f3768;
-  font-size: 16px;
-  font-family: "Trebuchet MS", "Microsoft YaHei", sans-serif;
-  font-weight: 700;
+  background: url("../assets/img/user_avatar.png") center / cover no-repeat;
+  border-color: #9db9f2;
+  color: transparent;
+  font-size: 0;
+}
+
+.msg.user-msg {
+  grid-template-columns: 1fr 44px;
+}
+
+.msg.user-msg .msg-avatar {
+  order: 2;
+}
+
+.msg.user-msg .msg-body {
+  order: 1;
+  justify-self: end;
+  text-align: right;
 }
 
 .msg-body {
@@ -696,6 +708,110 @@ body {
 .mode-toast.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+.settings-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(28, 22, 14, 0.42);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.settings-modal.show {
+  display: flex;
+}
+
+.settings-card {
+  width: min(460px, calc(100vw - 40px));
+  background: #fffdf5;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 14px 30px rgba(32, 24, 11, 0.2);
+  padding: 16px;
+}
+
+.settings-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #8a6525;
+  margin-bottom: 12px;
+  font-family: "Trebuchet MS", "Microsoft YaHei", sans-serif;
+}
+
+.settings-card input {
+  width: 100%;
+  height: 42px;
+  border-radius: 10px;
+  border: 2px solid #e3be67;
+  padding: 0 12px;
+  font-size: 14px;
+  outline: none;
+}
+
+.settings-fields {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.settings-field {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-field label {
+  font-size: 13px;
+  color: #9a7838;
+  font-family: "Trebuchet MS", "Microsoft YaHei", sans-serif;
+}
+
+.settings-card select {
+  width: 100%;
+  height: 38px;
+  border-radius: 10px;
+  border: 2px solid #e3be67;
+  padding: 0 10px;
+  font-size: 14px;
+  outline: none;
+  background: #fffdf6;
+}
+
+.settings-card input:focus {
+  border-color: #eea447;
+  box-shadow: 0 0 0 3px rgba(238, 164, 71, 0.16);
+}
+
+.settings-card select:focus {
+  border-color: #eea447;
+  box-shadow: 0 0 0 3px rgba(238, 164, 71, 0.16);
+}
+
+.settings-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.settings-actions button {
+  border: none;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  font-family: "Trebuchet MS", "Microsoft YaHei", sans-serif;
+  background: linear-gradient(120deg, #f8bf6a, #f19a43);
+  color: #fff;
+}
+
+.settings-actions button.ghost {
+  background: #fff4d7;
+  color: #9f742e;
+  border: 1px solid #ebcb83;
 }
 
 @keyframes app-rise {

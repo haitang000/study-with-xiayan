@@ -15,7 +15,18 @@ const characterBubble = document.getElementById("characterBubble");
 const askSubmitBtn = askForm.querySelector('button[type="submit"]');
 const modeSwitch = document.getElementById("modeSwitch");
 const modeButtons = Array.from(document.querySelectorAll(".mode-btn"));
+const settingsBtn = document.getElementById("settingsBtn");
+const settingsModal = document.getElementById("settingsModal");
+const apiKeyInput = document.getElementById("apiKeyInput");
+const saveApiKeyBtn = document.getElementById("saveApiKeyBtn");
+const clearApiKeyBtn = document.getElementById("clearApiKeyBtn");
+const closeSettingsBtn = document.getElementById("closeSettingsBtn");
+const fastModelSelect = document.getElementById("fastModelSelect");
+const thinkingModelSelect = document.getElementById("thinkingModelSelect");
 const modeToast = document.createElement("div");
+const USER_API_KEY_STORAGE = "moonshot_api_key";
+const FAST_MODEL_STORAGE = "fast_mode_model";
+const THINKING_MODEL_STORAGE = "thinking_mode_model";
 let currentMode = "fast";
 
 modeToast.className = "mode-toast";
@@ -97,7 +108,7 @@ function updateCharacterBubble(text) {
 }
 
 function syncModelWithMode() {
-  return MODE_DEFAULT_MODEL[currentMode] || "kimi-latest";
+  return getConfiguredModeModel(currentMode);
 }
 
 function setMode(mode) {
@@ -105,6 +116,39 @@ function setMode(mode) {
   modeButtons.forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.mode === mode);
   });
+}
+
+function getUserApiKey() {
+  try {
+    return localStorage.getItem(USER_API_KEY_STORAGE)?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
+function getConfiguredModeModel(mode) {
+  const defaultModel = MODE_DEFAULT_MODEL[mode] || "kimi-latest";
+  const storageKey = mode === "thinking" ? THINKING_MODEL_STORAGE : FAST_MODEL_STORAGE;
+  try {
+    const val = localStorage.getItem(storageKey);
+    return val && MODEL_CONFIGS[val] ? val : defaultModel;
+  } catch {
+    return defaultModel;
+  }
+}
+
+function setConfiguredModeModel(mode, modelKey) {
+  if (!MODEL_CONFIGS[modelKey]) return;
+  const storageKey = mode === "thinking" ? THINKING_MODEL_STORAGE : FAST_MODEL_STORAGE;
+  try {
+    localStorage.setItem(storageKey, modelKey);
+  } catch {}
+}
+
+function setSettingsModalOpen(open) {
+  if (!settingsModal) return;
+  settingsModal.classList.toggle("show", open);
+  settingsModal.setAttribute("aria-hidden", open ? "false" : "true");
 }
 
 let toastTimer = null;
@@ -123,6 +167,7 @@ function appendMsg(text, options = {}) {
   article.className = "msg";
   const avatar = document.createElement("div");
   const isUser = role === "user";
+  if (isUser) article.classList.add("user-msg");
   avatar.className = `msg-avatar ${isUser ? "user" : "ai"}`;
   avatar.textContent = isUser ? "你" : "";
   const body = document.createElement("div");
@@ -149,6 +194,7 @@ function appendMsg(text, options = {}) {
 }
 
 function increaseContext() {
+  if (!ctxBar || !ctxText) return;
   const current = parseFloat(ctxBar.style.width || "32");
   const next = Math.min(95, current + Math.random() * 8 + 2);
   ctxBar.style.width = `${next}%`;
@@ -164,6 +210,7 @@ function setBusy(state) {
 }
 
 function updateContextByUsage(usage) {
+  if (!ctxBar || !ctxText) return;
   if (!usage || typeof usage.total_tokens !== "number") {
     increaseContext();
     return;
@@ -190,15 +237,22 @@ function parseApiError(data, fallback) {
 
 async function* callModelStream(messages, configKey = syncModelWithMode()) {
   const config = MODEL_CONFIGS[configKey];
+  const userApiKey = getUserApiKey();
+  const requestUrl = userApiKey
+    ? "https://api.moonshot.cn/v1/chat/completions"
+    : config.url;
   const payload = {
     model: config.model,
     messages,
     stream: true,
   };
 
-  const response = await fetch(config.url, {
+  const headers = { "Content-Type": "application/json" };
+  if (userApiKey) headers.Authorization = `Bearer ${userApiKey}`;
+
+  const response = await fetch(requestUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(payload),
   });
 
@@ -485,8 +539,56 @@ askForm.addEventListener("submit", async (e) => {
   }
 });
 
-document.getElementById("escBtn").addEventListener("click", () => {
-  appendMsg("已退出沉浸模式。");
+settingsBtn?.addEventListener("click", () => {
+  apiKeyInput.value = getUserApiKey();
+  if (fastModelSelect) fastModelSelect.value = getConfiguredModeModel("fast");
+  if (thinkingModelSelect)
+    thinkingModelSelect.value = getConfiguredModeModel("thinking");
+  setSettingsModalOpen(true);
+  setTimeout(() => apiKeyInput?.focus(), 50);
+});
+
+closeSettingsBtn?.addEventListener("click", () => setSettingsModalOpen(false));
+
+settingsModal?.addEventListener("click", (e) => {
+  if (e.target === settingsModal) setSettingsModalOpen(false);
+});
+
+saveApiKeyBtn?.addEventListener("click", () => {
+  const key = apiKeyInput.value.trim();
+  try {
+    if (key) localStorage.setItem(USER_API_KEY_STORAGE, key);
+    const fastModel = fastModelSelect?.value || MODE_DEFAULT_MODEL.fast;
+    const thinkingModel =
+      thinkingModelSelect?.value || MODE_DEFAULT_MODEL.thinking;
+    setConfiguredModeModel("fast", fastModel);
+    setConfiguredModeModel("thinking", thinkingModel);
+    showModeTip("设置已保存");
+    setSettingsModalOpen(false);
+  } catch {
+    showModeTip("保存失败：浏览器禁止了本地存储");
+  }
+});
+
+clearApiKeyBtn?.addEventListener("click", () => {
+  try {
+    localStorage.removeItem(USER_API_KEY_STORAGE);
+    localStorage.removeItem(FAST_MODEL_STORAGE);
+    localStorage.removeItem(THINKING_MODEL_STORAGE);
+    apiKeyInput.value = "";
+    if (fastModelSelect) fastModelSelect.value = MODE_DEFAULT_MODEL.fast;
+    if (thinkingModelSelect)
+      thinkingModelSelect.value = MODE_DEFAULT_MODEL.thinking;
+    showModeTip("已清除并恢复默认模型");
+  } catch {
+    showModeTip("清除失败");
+  }
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && settingsModal?.classList.contains("show")) {
+    setSettingsModalOpen(false);
+  }
 });
 
 modeSwitch?.addEventListener("click", (e) => {
