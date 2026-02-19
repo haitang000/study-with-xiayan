@@ -77,7 +77,12 @@
     </main>
 
     <aside class="draft panel">
-      <div class="head">◆ 笔记</div>
+      <div class="head draft-head">
+        <span>◆ 笔记</span>
+        <button type="button" id="exportMdBtn" class="draft-export-btn">
+          <i class="fa-solid fa-file-arrow-down"></i> 导出 MD
+        </button>
+      </div>
       <div class="draft-box">
         <textarea id="draft" placeholder="夏彦回答后会自动生成笔记..."></textarea>
       </div>

@@ -673,6 +673,39 @@ body {
   grid-template-rows: 52px 1fr;
 }
 
+.draft-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.draft-export-btn {
+  border: 1px solid #f4c267;
+  background: linear-gradient(120deg, #f8bf6a, #f19a43);
+  color: #fff;
+  border-radius: 9px;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
+  font-family: "Trebuchet MS", "Microsoft YaHei", sans-serif;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.draft-export-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.02);
+}
+
+.draft-export-btn:active {
+  transform: translateY(0);
+}
+
 .draft-box {
   padding: 12px;
   background: #f5f5f5;

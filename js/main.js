@@ -9,6 +9,7 @@ const chatFeed = document.getElementById("chatFeed");
 const askForm = document.getElementById("askForm");
 const askInput = document.getElementById("askInput");
 const draftInput = document.getElementById("draft");
+const exportMdBtn = document.getElementById("exportMdBtn");
 const timeTip = document.getElementById("timeTip");
 const ctxBar = document.getElementById("ctxBar");
 const ctxText = document.getElementById("ctxText");
@@ -61,6 +62,9 @@ const MODE_INSTRUCTIONS = {
   fast: "【快速模式】请直接给出答案，保持简洁明了。",
   thinking: "【深度思考模式】请一步步思考，详细展示推导过程，并分析关键细节。",
 };
+
+const PERSONA_REINFORCEMENT =
+  "【人设锁定】你必须始终以夏彦身份回复，称呼用户为华生或我的华生；语气温柔、可靠、带一点熟悉感，不要跳出角色，不要提及设定来源。讲解时先用1句贴心引导，再进入知识内容。";
 
 const MODE_DEFAULT_MODEL = {
   fast: "moonshot-v1-32k-vision-preview",
@@ -225,6 +229,30 @@ function showModeTip(text) {
   toastTimer = setTimeout(() => {
     modeToast.classList.remove("show");
   }, 1800);
+}
+
+function exportDraftAsMarkdown() {
+  if (!draftInput) return;
+  const content = draftInput.value.trim();
+  if (!content) {
+    showModeTip("笔记为空，暂无可导出内容");
+    return;
+  }
+  const now = new Date();
+  const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+    now.getDate(),
+  ).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+  const markdown = `# 学习笔记\n\n导出时间：${formatTime()}\n\n---\n\n${content}\n\n---\n💗 由 Study With Xiayan 生成`;
+  const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `study-note_${stamp}.md`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  showModeTip("已导出 Markdown 笔记");
 }
 
 function appendMsg(text, options = {}) {
@@ -431,7 +459,7 @@ async function summarizeToDraft(question, answer) {
       {
         role: "system",
         content:
-          "你是学习笔记整理助手。请把问答整理成简洁笔记，输出纯文本，不要Markdown，不要<think>标签。结构：题目要点、核心思路、关键步骤、易错点。",
+          "你是学习笔记整理助手。请把问答整理成简洁笔记，不要<think>标签。结构：题目要点、核心思路、关键步骤、易错点。",
       },
       {
         role: "user",
@@ -583,7 +611,7 @@ explainBtn.addEventListener("click", async () => {
   try {
     await systemPromptReady;
     const modePrompt = MODE_INSTRUCTIONS[currentMode];
-    const userPrompt = `${modePrompt}\n请讲解这道题。先给最终结论，再给完整步骤推导（分点编号），最后给易错点和检查方法。`;
+    const userPrompt = `${modePrompt}\n${PERSONA_REINFORCEMENT}\n请讲解这道题。先给最终结论，再给完整步骤推导（分点编号），最后给易错点和检查方法。`;
     const messages = [
       { role: "system", content: SYSTEM_PROMPT },
       ...conversation,
@@ -675,7 +703,7 @@ askForm.addEventListener("submit", async (e) => {
   try {
     await systemPromptReady;
     const modePrompt = MODE_INSTRUCTIONS[currentMode];
-    const fullQuery = `${modePrompt}\n${q}`;
+    const fullQuery = `${modePrompt}\n${PERSONA_REINFORCEMENT}\n${q}`;
     const messages = [
       { role: "system", content: SYSTEM_PROMPT },
       ...conversation,
@@ -817,6 +845,8 @@ clearApiKeyBtn?.addEventListener("click", () => {
     showModeTip("清除失败");
   }
 });
+
+exportMdBtn?.addEventListener("click", exportDraftAsMarkdown);
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && settingsModal?.classList.contains("show")) {
