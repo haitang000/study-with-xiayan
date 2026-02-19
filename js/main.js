@@ -138,6 +138,12 @@ function getConfiguredModeModel(mode) {
     const val = localStorage.getItem(storageKey)?.trim();
     if (!val) return defaultModel;
     if (provider === "proxy") return MODEL_CONFIGS[val] ? val : defaultModel;
+    if (provider === "native_gemini") {
+      return /^gemini/i.test(val) ? val : defaultModel;
+    }
+    if (provider === "native_deepseek" || provider === "deepseek") {
+      return /^deepseek/i.test(val) ? val : defaultModel;
+    }
     return val;
   } catch {
     return defaultModel;
@@ -294,6 +300,23 @@ function parseApiError(data, fallback) {
   return fallback || "接口调用失败，请稍后重试。";
 }
 
+function extractChunkText(data) {
+  const delta = data?.choices?.[0]?.delta || {};
+  if (typeof delta.content === "string") return delta.content;
+  if (Array.isArray(delta.content)) {
+    return delta.content
+      .map((item) => (typeof item === "string" ? item : item?.text || ""))
+      .join("");
+  }
+  if (typeof delta.reasoning_content === "string") return delta.reasoning_content;
+  if (Array.isArray(delta.reasoning_content)) {
+    return delta.reasoning_content
+      .map((item) => (typeof item === "string" ? item : item?.text || ""))
+      .join("");
+  }
+  return "";
+}
+
 async function* callModelStream(messages, configKey = syncModelWithMode()) {
   const provider = getProvider();
   const isProxy = provider === "proxy";
@@ -357,8 +380,8 @@ async function* callModelStream(messages, configKey = syncModelWithMode()) {
       if (dataStr === "[DONE]") return;
       try {
         const data = JSON.parse(dataStr);
-        const content = data.choices?.[0]?.delta?.content;
-        if (content) yield { content, usage: data.usage };
+        const content = extractChunkText(data);
+        if (content || data.usage) yield { content, usage: data.usage };
       } catch (e) {}
     }
   }
