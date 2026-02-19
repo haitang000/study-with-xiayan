@@ -1,0 +1,462 @@
+const fileInput = document.getElementById("fileInput");
+const pickBtn = document.getElementById("pickBtn");
+const explainBtn = document.getElementById("explainBtn");
+const clearBtn = document.getElementById("clearBtn");
+const previewImg = document.getElementById("previewImg");
+const previewBox = document.getElementById("previewBox");
+const placeholder = document.getElementById("placeholder");
+const chatFeed = document.getElementById("chatFeed");
+const askForm = document.getElementById("askForm");
+const askInput = document.getElementById("askInput");
+const timeTip = document.getElementById("timeTip");
+const ctxBar = document.getElementById("ctxBar");
+const ctxText = document.getElementById("ctxText");
+const characterBubble = document.getElementById("characterBubble");
+const askSubmitBtn = askForm.querySelector('button[type="submit"]');
+const modelSelect = document.getElementById("modelSelect");
+const modeSelect = document.getElementById("modeSelect");
+
+marked.use({
+  breaks: true,
+  gfm: true,
+});
+
+const MODEL_CONFIGS = {
+  "gemini-3-flash": {
+    url: "https://api.xiayan.icu/gemini/v1/chat/completions?pwd=haitang000",
+    model: "gemini-3-flash",
+  },
+  "kimi-2.5": {
+    url: "https://api.xiayan.icu/kimi/v1/chat/completions?pwd=haitang000",
+    model: "kimi-k2.5",
+  },
+  "moonshot-v1-32k": {
+    url: "https://api.xiayan.icu/kimi/v1/chat/completions?pwd=haitang000",
+    model: "moonshot-v1-32k",
+  },
+};
+
+const MODE_INSTRUCTIONS = {
+  fast: "【快速模式】请直接给出答案，保持简洁明了。",
+  thinking: "【深度思考模式】请一步步思考，详细展示推导过程，并分析关键细节。",
+};
+
+const DEFAULT_SYSTEM_PROMPT = "";
+let SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT;
+
+let uploaded = null;
+let uploadedDataUrl = "";
+let previewObjectUrl = "";
+let isBusy = false;
+const conversation = [];
+const systemPromptReady = loadSystemPrompt();
+
+async function loadSystemPrompt() {
+  try {
+    const response = await fetch("prompt.md", { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const text = (await response.text()).trim();
+    if (text) SYSTEM_PROMPT = text;
+  } catch (error) {
+    console.warn("加载 prompt.md 失败，已使用默认系统提示词。", error);
+  }
+}
+
+function formatTime() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mm = String(now.getMinutes()).padStart(2, "0");
+  return `${y}/${m}/${d} ${hh}:${mm}`;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function updateCharacterBubble(text) {
+  characterBubble.style.opacity = "0";
+  characterBubble.style.transform = "translateY(5px)";
+  setTimeout(() => {
+    characterBubble.textContent = text;
+    characterBubble.style.opacity = "1";
+    characterBubble.style.transform = "translateY(0)";
+  }, 300);
+}
+
+function appendMsg(text, options = {}) {
+  const { role = "assistant", thinking = false, isError = false } = options;
+  const article = document.createElement("article");
+  article.className = "msg";
+  const avatar = document.createElement("div");
+  const isUser = role === "user";
+  avatar.className = `msg-avatar ${isUser ? "user" : "ai"}`;
+  avatar.textContent = isUser ? "你" : "";
+  const body = document.createElement("div");
+  body.className = "msg-body";
+  if (isError) body.classList.add("error-box");
+  if (thinking) {
+    body.innerHTML = `
+          <div class="skeleton" id="current-thinking">
+            <div class="skeleton-bar"></div>
+            <div class="skeleton-bar"></div>
+            <div class="skeleton-bar"></div>
+          </div>`;
+  } else {
+    body.innerHTML = marked.parse(text);
+    body
+      .querySelectorAll("pre code")
+      .forEach((el) => hljs.highlightElement(el));
+  }
+  article.appendChild(avatar);
+  article.appendChild(body);
+  chatFeed.appendChild(article);
+  chatFeed.scrollTop = chatFeed.scrollHeight;
+  return { article, body };
+}
+
+function increaseContext() {
+  const current = parseFloat(ctxBar.style.width || "32");
+  const next = Math.min(95, current + Math.random() * 8 + 2);
+  ctxBar.style.width = `${next}%`;
+  ctxText.textContent = `${(next * 0.4).toFixed(1)}k`;
+}
+
+function setBusy(state) {
+  isBusy = state;
+  pickBtn.disabled = state;
+  explainBtn.disabled = state;
+  askInput.disabled = state;
+  askSubmitBtn.disabled = state;
+}
+
+function updateContextByUsage(usage) {
+  if (!usage || typeof usage.total_tokens !== "number") {
+    increaseContext();
+    return;
+  }
+  const total = usage.total_tokens;
+  const pct = Math.max(32, Math.min(95, (total / 3000) * 100));
+  ctxBar.style.width = `${pct}%`;
+  ctxText.textContent = `${(total / 1000).toFixed(1)}k`;
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("图片读取失败，请重试。"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function parseApiError(data, fallback) {
+  if (data && data.error && data.error.message) return data.error.message;
+  return fallback || "接口调用失败，请稍后重试。";
+}
+
+async function* callModelStream(messages, configKey = modelSelect.value) {
+  const config = MODEL_CONFIGS[configKey];
+  const payload = {
+    model: config.model,
+    messages,
+    stream: true,
+  };
+
+  const response = await fetch(config.url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      parseApiError(errorData, `请求失败（HTTP ${response.status}）`),
+    );
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop();
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith("data: ")) continue;
+      const dataStr = trimmed.slice(6);
+      if (dataStr === "[DONE]") return;
+      try {
+        const data = JSON.parse(dataStr);
+        const content = data.choices?.[0]?.delta?.content;
+        if (content) yield { content, usage: data.usage };
+      } catch (e) {}
+    }
+  }
+}
+
+async function initGreeting() {
+  await systemPromptReady;
+  const { body: msgBody } = appendMsg("", { thinking: true });
+
+  try {
+    const messages = [
+      { role: "system", content: SYSTEM_PROMPT },
+      {
+        role: "user",
+        content:
+          "（华生进屋了，你抬头看见她，自然地打个招呼吧。记得保持你的性格特点，不要输出Markdown，不要解释设定。）",
+      },
+    ];
+
+    let fullText = "";
+    let displayedText = "";
+    const stream = callModelStream(messages, "moonshot-v1-32k");
+
+    for await (const chunk of stream) {
+      if (fullText === "") {
+        msgBody.innerHTML = "";
+        msgBody.classList.add("typing-active");
+      }
+      fullText += chunk.content;
+
+      while (displayedText.length < fullText.length) {
+        const charGap = fullText.length - displayedText.length;
+        const step = charGap > 30 ? Math.ceil(charGap / 5) : 1;
+        displayedText = fullText.substring(0, displayedText.length + step);
+        msgBody.innerHTML = marked.parse(displayedText);
+        chatFeed.scrollTop = chatFeed.scrollHeight;
+        if (charGap < 50) await new Promise((r) => setTimeout(r, 15));
+      }
+    }
+    msgBody.classList.remove("typing-active");
+    msgBody
+      .querySelectorAll("pre code")
+      .forEach((el) => hljs.highlightElement(el));
+    conversation.push({ role: "assistant", content: fullText });
+  } catch (e) {
+    msgBody.classList.add("error-box");
+    msgBody.innerHTML =
+      "嘿，华生，你来啦！刚才信号好像有点不稳定……（初始化失败）";
+  }
+}
+
+function clearPreview(resetConversation = true) {
+  uploaded = null;
+  uploadedDataUrl = "";
+  if (previewObjectUrl) {
+    URL.revokeObjectURL(previewObjectUrl);
+    previewObjectUrl = "";
+  }
+  previewImg.style.display = "none";
+  previewImg.removeAttribute("src");
+  placeholder.style.display = "block";
+  characterBubble.textContent =
+    "把题目发给我，我会先给你结论，再一步一步解释为什么这样做。";
+  if (resetConversation) conversation.length = 0;
+}
+
+pickBtn.addEventListener("click", () => fileInput.click());
+
+fileInput.addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    appendMsg("只支持图片文件，请重新选择。", { isError: true });
+    return;
+  }
+  if (file.size > 8 * 1024 * 1024) {
+    appendMsg("图片请控制在 8MB 以内，避免上传失败。", { isError: true });
+    return;
+  }
+
+  uploaded = file;
+  conversation.length = 0;
+
+  if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+  previewObjectUrl = URL.createObjectURL(file);
+  previewImg.src = previewObjectUrl;
+  previewImg.style.display = "block";
+  placeholder.style.display = "none";
+
+  try {
+    uploadedDataUrl = await fileToDataUrl(file);
+  } catch (error) {
+    clearPreview(false);
+    appendMsg(error.message, { isError: true });
+    return;
+  }
+
+  timeTip.textContent = formatTime();
+  updateCharacterBubble(`已收到题目《${file.name}》，点“讲解”开始。`);
+  appendMsg(`收到你的题目：${file.name}。你可以点“讲解”，我会给你完整思路。`);
+  explainBtn.classList.add("btn-pulse");
+  increaseContext();
+});
+
+explainBtn.addEventListener("click", async () => {
+  if (!uploaded) {
+    appendMsg("请先上传题目图片，我才能开始讲解。", { isError: true });
+    return;
+  }
+  if (!uploadedDataUrl) {
+    appendMsg("图片尚未就绪，请重新上传后再试。", { isError: true });
+    return;
+  }
+  if (isBusy) return;
+
+  explainBtn.classList.remove("btn-pulse");
+  const { article: thinkingMsg, body: msgBody } = appendMsg("正在思考...", {
+    thinking: true,
+  });
+  setBusy(true);
+  try {
+    await systemPromptReady;
+    const modePrompt = MODE_INSTRUCTIONS[modeSelect.value];
+    const userPrompt = `${modePrompt}\n请讲解这道题。先给最终结论，再给完整步骤推导（分点编号），最后给易错点和检查方法。`;
+    const messages = [
+      { role: "system", content: SYSTEM_PROMPT },
+      ...conversation,
+      {
+        role: "user",
+        content: [
+          { type: "text", text: userPrompt },
+          { type: "image_url", image_url: { url: uploadedDataUrl } },
+        ],
+      },
+    ];
+
+    let fullText = "";
+    let displayedText = "";
+    let lastUsage = null;
+    const stream = callModelStream(messages);
+
+    for await (const chunk of stream) {
+      if (fullText === "") {
+        msgBody.innerHTML = ""; // 收到第一个块时清除骨架屏
+        msgBody.classList.add("typing-active");
+      }
+      fullText += chunk.content;
+
+      // 逐字平滑追赶逻辑
+      while (displayedText.length < fullText.length) {
+        const charGap = fullText.length - displayedText.length;
+        const step = charGap > 30 ? Math.ceil(charGap / 5) : 1;
+        displayedText = fullText.substring(0, displayedText.length + step);
+
+        msgBody.innerHTML = marked.parse(displayedText);
+        chatFeed.scrollTop = chatFeed.scrollHeight;
+        if (charGap < 50) await new Promise((r) => setTimeout(r, 15));
+      }
+      if (chunk.usage) lastUsage = chunk.usage;
+    }
+
+    msgBody.classList.remove("typing-active");
+    msgBody
+      .querySelectorAll("pre code")
+      .forEach((el) => hljs.highlightElement(el));
+    conversation.push({
+      role: "user",
+      content: "我上传了一道题目图片，请你完整讲解。",
+    });
+    conversation.push({ role: "assistant", content: fullText });
+    updateCharacterBubble("讲解完成。你可以继续追问“为什么这么做”。");
+    if (lastUsage) updateContextByUsage(lastUsage);
+  } catch (error) {
+    thinkingMsg.remove();
+    appendMsg(`讲解失败：${error.message}`, { isError: true });
+  } finally {
+    setBusy(false);
+  }
+});
+
+clearBtn.addEventListener("click", () => {
+  clearPreview();
+  explainBtn.classList.remove("btn-pulse");
+  fileInput.value = "";
+  appendMsg("题目已清空。重新上传后我会继续讲解。");
+});
+
+askForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const q = askInput.value.trim();
+  if (!q) return;
+  if (isBusy) return;
+
+  appendMsg(q, { role: "user" });
+  askInput.value = "";
+  setBusy(true);
+
+  let thinkingMsg = null;
+  let msgBody = null;
+
+  await sleep(500);
+
+  ({ article: thinkingMsg, body: msgBody } = appendMsg("正在思考...", {
+    thinking: true,
+  }));
+  try {
+    await systemPromptReady;
+    const modePrompt = MODE_INSTRUCTIONS[modeSelect.value];
+    const fullQuery = `${modePrompt}\n${q}`;
+    const messages = [
+      { role: "system", content: SYSTEM_PROMPT },
+      ...conversation,
+      { role: "user", content: fullQuery },
+    ];
+
+    let fullText = "";
+    let displayedText = "";
+    let lastUsage = null;
+    const stream = callModelStream(messages);
+
+    for await (const chunk of stream) {
+      if (fullText === "") {
+        msgBody.innerHTML = "";
+        msgBody.classList.add("typing-active");
+      }
+      fullText += chunk.content;
+
+      while (displayedText.length < fullText.length) {
+        const charGap = fullText.length - displayedText.length;
+        const step = charGap > 30 ? Math.ceil(charGap / 5) : 1;
+        displayedText = fullText.substring(0, displayedText.length + step);
+
+        msgBody.innerHTML = marked.parse(displayedText);
+        chatFeed.scrollTop = chatFeed.scrollHeight;
+        if (charGap < 50) await new Promise((r) => setTimeout(r, 15));
+      }
+      if (chunk.usage) lastUsage = chunk.usage;
+    }
+
+    msgBody.classList.remove("typing-active");
+    msgBody
+      .querySelectorAll("pre code")
+      .forEach((el) => hljs.highlightElement(el));
+    conversation.push({ role: "user", content: q });
+    conversation.push({ role: "assistant", content: fullText });
+    if (lastUsage) updateContextByUsage(lastUsage);
+  } catch (error) {
+    if (thinkingMsg) thinkingMsg.remove();
+    appendMsg(`追问失败：${error.message}`, { isError: true });
+  } finally {
+    setBusy(false);
+  }
+});
+
+document.getElementById("escBtn").addEventListener("click", () => {
+  appendMsg("已退出沉浸模式。");
+});
+
+timeTip.textContent = formatTime();
+initGreeting();
