@@ -99,6 +99,7 @@
         <div class="settings-field">
           <label for="providerSelect">模型供应商</label>
           <select id="providerSelect">
+            <option value="proxy_default">内置默认 (快速DeepSeek / 思考Kimi)</option>
             <option value="proxy">内置代理 (Kimi)</option>
             <option value="native_gemini">内置代理 (Gemini)(速度较慢, 限量)</option>
             <option value="native_deepseek">内置代理 (DeepSeek)</option>
@@ -127,6 +128,7 @@
       </div>
       <div class="settings-actions">
         <button type="button" id="saveApiKeyBtn">保存</button>
+        <button type="button" id="resetDefaultModelsBtn" class="ghost">默认</button>
         <button type="button" id="clearApiKeyBtn" class="ghost">清除</button>
         <button type="button" id="closeSettingsBtn" class="ghost">关闭</button>
       </div>

@@ -21,6 +21,7 @@ const settingsBtn = document.getElementById("settingsBtn");
 const settingsModal = document.getElementById("settingsModal");
 const apiKeyInput = document.getElementById("apiKeyInput");
 const saveApiKeyBtn = document.getElementById("saveApiKeyBtn");
+const resetDefaultModelsBtn = document.getElementById("resetDefaultModelsBtn");
 const clearApiKeyBtn = document.getElementById("clearApiKeyBtn");
 const closeSettingsBtn = document.getElementById("closeSettingsBtn");
 const providerSelect = document.getElementById("providerSelect");
@@ -44,6 +45,10 @@ marked.use({
 });
 
 const MODEL_CONFIGS = {
+  "deepseek-chat": {
+    url: "https://api.xiayan.icu/deepseek/v1/chat/completions?pwd=haitang000",
+    model: "deepseek-chat",
+  },
   "kimi-latest": {
     url: "https://api.xiayan.icu/kimi/v1/chat/completions?pwd=haitang000",
     model: "kimi-latest",
@@ -67,7 +72,7 @@ const PERSONA_REINFORCEMENT =
   "【人设锁定】你必须始终以夏彦身份回复，称呼用户为华生或我的华生；语气温柔、可靠、带一点熟悉感，不要跳出角色，不要提及设定来源。讲解时先用1句贴心引导，再进入知识内容。";
 
 const MODE_DEFAULT_MODEL = {
-  fast: "moonshot-v1-32k-vision-preview",
+  fast: "deepseek-chat",
   thinking: "kimi-2.5",
 };
 
@@ -142,7 +147,8 @@ function getConfiguredModeModel(mode) {
   try {
     const val = localStorage.getItem(storageKey)?.trim();
     if (!val) return defaultModel;
-    if (provider === "proxy") return MODEL_CONFIGS[val] ? val : defaultModel;
+    if (provider === "proxy" || provider === "proxy_default")
+      return MODEL_CONFIGS[val] ? val : defaultModel;
     if (provider === "native_gemini") {
       return /^gemini/i.test(val) ? val : defaultModel;
     }
@@ -165,13 +171,15 @@ function setConfiguredModeModel(mode, modelKey) {
 
 function getProvider() {
   try {
-    return localStorage.getItem(PROVIDER_STORAGE) || "proxy";
+    return localStorage.getItem(PROVIDER_STORAGE) || "proxy_default";
   } catch {
-    return "proxy";
+    return "proxy_default";
   }
 }
 
 function getProxyModelByMode(mode) {
+  if (mode === "fast") return "deepseek-chat";
+  if (mode === "thinking") return "kimi-2.5";
   const preferred = MODE_DEFAULT_MODEL[mode] || MODE_DEFAULT_MODEL.fast;
   if (preferred && MODEL_CONFIGS[preferred]) return preferred;
   if (mode === "thinking" && MODEL_CONFIGS["kimi-2.5"]) return "kimi-2.5";
@@ -180,7 +188,8 @@ function getProxyModelByMode(mode) {
 }
 
 function getDefaultModelForProvider(provider, mode) {
-  if (provider === "proxy") return getProxyModelByMode(mode);
+  if (provider === "proxy" || provider === "proxy_default")
+    return getProxyModelByMode(mode);
   const defaults = {
     native_gemini: { fast: "gemini-3-flash", thinking: "gemini-3-flash" },
     native_deepseek: { fast: "deepseek-chat", thinking: "deepseek-reasoner" },
@@ -401,9 +410,10 @@ async function* callModelStream(
 ) {
   const targetMode = options.modeOverride || currentMode;
   const provider = getProvider();
-  const isProxy = provider === "proxy";
+  const isProxy = provider === "proxy" || provider === "proxy_default";
   const noAuthProviders = new Set([
     "proxy",
+    "proxy_default",
     "native_deepseek",
     "native_gemini",
   ]);
@@ -516,7 +526,7 @@ async function initGreeting() {
       {
         role: "user",
         content:
-          "你正在给华生发消息，自然地向华生打个招呼吧。记得保持你的性格特点，不要输出Markdown，不要解释设定，也不要用括号表示动作，更不要代入场景。",
+          "你正在给华生发消息，自然地向华生打个招呼吧。记得保持你的性格特点，不要输出Markdown，不要解释设定，也不要用括号表示动作或表情，更不要代入场景。",
       },
     ];
 
@@ -788,12 +798,12 @@ settingsModal?.addEventListener("click", (e) => {
 });
 
 providerSelect?.addEventListener("change", () => {
-  const provider = providerSelect.value || "proxy";
+  const provider = providerSelect.value || "proxy_default";
   if (baseUrlInput) {
     baseUrlInput.value =
       provider === "custom" ? getProviderBaseUrl("custom") : "";
   }
-  if (provider === "proxy") {
+  if (provider === "proxy" || provider === "proxy_default") {
     if (fastModelInput) fastModelInput.value = getProxyModelByMode("fast");
     if (thinkingModelInput) thinkingModelInput.value = getProxyModelByMode("thinking");
     return;
@@ -812,7 +822,7 @@ providerSelect?.addEventListener("change", () => {
 saveApiKeyBtn?.addEventListener("click", () => {
   const key = apiKeyInput.value.trim();
   try {
-    const provider = providerSelect?.value || "proxy";
+    const provider = providerSelect?.value || "proxy_default";
     localStorage.setItem(PROVIDER_STORAGE, provider);
     if (key) localStorage.setItem(USER_API_KEY_STORAGE, key);
     if (provider === "custom") {
@@ -825,7 +835,7 @@ saveApiKeyBtn?.addEventListener("click", () => {
     let thinkingModel =
       thinkingModelInput?.value.trim() ||
       getDefaultModelForProvider(provider, "thinking");
-    if (provider === "proxy") {
+    if (provider === "proxy" || provider === "proxy_default") {
       if (!MODEL_CONFIGS[fastModel]) fastModel = getProxyModelByMode("fast");
       if (!MODEL_CONFIGS[thinkingModel])
         thinkingModel = getProxyModelByMode("thinking");
@@ -847,13 +857,32 @@ clearApiKeyBtn?.addEventListener("click", () => {
     localStorage.removeItem(FAST_MODEL_STORAGE);
     localStorage.removeItem(THINKING_MODEL_STORAGE);
     apiKeyInput.value = "";
-    if (providerSelect) providerSelect.value = "proxy";
+    if (providerSelect) providerSelect.value = "proxy_default";
     if (baseUrlInput) baseUrlInput.value = "";
     if (fastModelInput) fastModelInput.value = getProxyModelByMode("fast");
     if (thinkingModelInput) thinkingModelInput.value = getProxyModelByMode("thinking");
     showModeTip("已清除并恢复默认模型");
   } catch {
     showModeTip("清除失败");
+  }
+});
+
+resetDefaultModelsBtn?.addEventListener("click", () => {
+  try {
+    const provider = "proxy_default";
+    localStorage.setItem(PROVIDER_STORAGE, provider);
+    localStorage.removeItem(BASE_URL_STORAGE);
+    const fastModel = getProxyModelByMode("fast");
+    const thinkingModel = getProxyModelByMode("thinking");
+    setConfiguredModeModel("fast", fastModel);
+    setConfiguredModeModel("thinking", thinkingModel);
+    if (providerSelect) providerSelect.value = provider;
+    if (baseUrlInput) baseUrlInput.value = "";
+    if (fastModelInput) fastModelInput.value = fastModel;
+    if (thinkingModelInput) thinkingModelInput.value = thinkingModel;
+    showModeTip("已恢复默认：快速 DeepSeek，思考 Kimi");
+  } catch {
+    showModeTip("恢复默认失败");
   }
 });
 
