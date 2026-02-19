@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>题目讲解助手</title>
+  <title>Study With 夏彦</title>
   <link
     rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
@@ -64,14 +64,22 @@
 
       <section class="chat-feed" id="chatFeed"></section>
 
-      <form class="ask" id="askForm">
-        <input id="askInput" placeholder="有什么不懂的，尽管问" />
+      <form class="ask" id="askForm" autocomplete="off">
+        <input
+          id="askInput"
+          name="ask_no_history"
+          placeholder="有什么不懂的，尽管问"
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
+        />
         <button type="submit"><i class="fa-regular fa-paper-plane"></i>发送</button>
       </form>
     </main>
 
     <aside class="draft panel">
-      <div class="head">◆ 他的草稿</div>
+      <div class="head">◆ 笔记</div>
       <div class="draft-box">
         <textarea id="draft" placeholder="这里可以记录解题草稿、关键公式和中间结论..."></textarea>
       </div>
