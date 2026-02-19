@@ -163,6 +163,7 @@ function getProvider() {
 function getDefaultModelForProvider(provider, mode) {
   const defaults = {
     proxy: MODE_DEFAULT_MODEL,
+    native_deepseek: { fast: "deepseek-chat", thinking: "deepseek-reasoner" },
     moonshot: { fast: "moonshot-v1-8k", thinking: "moonshot-v1-32k" },
     openai: { fast: "gpt-4o-mini", thinking: "gpt-4.1" },
     deepseek: { fast: "deepseek-chat", thinking: "deepseek-reasoner" },
@@ -175,6 +176,8 @@ function getDefaultModelForProvider(provider, mode) {
 
 function getProviderBaseUrl(provider) {
   const map = {
+    native_deepseek:
+      "https://api.xiayan.icu/deepseek/v1/chat/completions?pwd=haitang000",
     moonshot: "https://api.moonshot.cn/v1/chat/completions",
     openai: "https://api.openai.com/v1/chat/completions",
     deepseek: "https://api.deepseek.com/v1/chat/completions",
@@ -283,6 +286,8 @@ function parseApiError(data, fallback) {
 async function* callModelStream(messages, configKey = syncModelWithMode()) {
   const provider = getProvider();
   const isProxy = provider === "proxy";
+  const noAuthProviders = new Set(["proxy", "native_deepseek"]);
+  const requiresApiKey = !noAuthProviders.has(provider);
   const config = MODEL_CONFIGS[configKey] || MODEL_CONFIGS[MODE_DEFAULT_MODEL.fast];
   const modelName = isProxy
     ? config.model
@@ -296,10 +301,11 @@ async function* callModelStream(messages, configKey = syncModelWithMode()) {
   };
 
   const headers = { "Content-Type": "application/json" };
-  if (!isProxy && userApiKey) headers.Authorization = `Bearer ${userApiKey}`;
+  if (requiresApiKey && userApiKey) headers.Authorization = `Bearer ${userApiKey}`;
 
   if (!requestUrl) throw new Error("请在设置中填写有效的 API Base URL");
-  if (!isProxy && !userApiKey) throw new Error("请先在设置中填写 API Key");
+  if (requiresApiKey && !userApiKey)
+    throw new Error("请先在设置中填写 API Key");
 
   const response = await fetch(requestUrl, {
     method: "POST",
@@ -608,6 +614,18 @@ closeSettingsBtn?.addEventListener("click", () => setSettingsModalOpen(false));
 
 settingsModal?.addEventListener("click", (e) => {
   if (e.target === settingsModal) setSettingsModalOpen(false);
+});
+
+providerSelect?.addEventListener("change", () => {
+  const provider = providerSelect.value || "proxy";
+  if (baseUrlInput) {
+    baseUrlInput.value =
+      provider === "custom" ? getProviderBaseUrl("custom") : "";
+  }
+  if (provider === "deepseek" || provider === "native_deepseek") {
+    if (fastModelInput) fastModelInput.value = "deepseek-chat";
+    if (thinkingModelInput) thinkingModelInput.value = "deepseek-reasoner";
+  }
 });
 
 saveApiKeyBtn?.addEventListener("click", () => {
