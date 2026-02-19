@@ -308,13 +308,44 @@ function extractChunkText(data) {
       .map((item) => (typeof item === "string" ? item : item?.text || ""))
       .join("");
   }
-  if (typeof delta.reasoning_content === "string") return delta.reasoning_content;
-  if (Array.isArray(delta.reasoning_content)) {
-    return delta.reasoning_content
-      .map((item) => (typeof item === "string" ? item : item?.text || ""))
-      .join("");
-  }
   return "";
+}
+
+function createAssistantContentFilter() {
+  let hidingThink = false;
+  return (chunkText) => {
+    if (!chunkText) return "";
+    let text = String(chunkText);
+    let output = "";
+
+    if (hidingThink) {
+      const endIdx = text.indexOf("</think>");
+      if (endIdx === -1) return "";
+      text = text.slice(endIdx + 8);
+      hidingThink = false;
+    }
+
+    while (text.length) {
+      const startIdx = text.indexOf("<think>");
+      if (startIdx === -1) {
+        output += text;
+        break;
+      }
+
+      output += text.slice(0, startIdx);
+      const afterStart = text.slice(startIdx + 7);
+      const endIdx = afterStart.indexOf("</think>");
+
+      if (endIdx === -1) {
+        hidingThink = true;
+        break;
+      }
+
+      text = afterStart.slice(endIdx + 8);
+    }
+
+    return output;
+  };
 }
 
 async function* callModelStream(messages, configKey = syncModelWithMode()) {
@@ -403,14 +434,17 @@ async function initGreeting() {
 
     let fullText = "";
     let displayedText = "";
+    const filterAssistantChunk = createAssistantContentFilter();
     const stream = callModelStream(messages);
 
     for await (const chunk of stream) {
+      const visibleContent = filterAssistantChunk(chunk.content);
+      if (!visibleContent) continue;
       if (fullText === "") {
         msgBody.innerHTML = "";
         msgBody.classList.add("typing-active");
       }
-      fullText += chunk.content;
+      fullText += visibleContent;
 
       while (displayedText.length < fullText.length) {
         const charGap = fullText.length - displayedText.length;
@@ -522,14 +556,20 @@ explainBtn.addEventListener("click", async () => {
     let fullText = "";
     let displayedText = "";
     let lastUsage = null;
+    const filterAssistantChunk = createAssistantContentFilter();
     const stream = callModelStream(messages);
 
     for await (const chunk of stream) {
+      const visibleContent = filterAssistantChunk(chunk.content);
+      if (!visibleContent) {
+        if (chunk.usage) lastUsage = chunk.usage;
+        continue;
+      }
       if (fullText === "") {
         msgBody.innerHTML = ""; // 收到第一个块时清除骨架屏
         msgBody.classList.add("typing-active");
       }
-      fullText += chunk.content;
+      fullText += visibleContent;
 
       // 逐字平滑追赶逻辑
       while (displayedText.length < fullText.length) {
@@ -601,14 +641,20 @@ askForm.addEventListener("submit", async (e) => {
     let fullText = "";
     let displayedText = "";
     let lastUsage = null;
+    const filterAssistantChunk = createAssistantContentFilter();
     const stream = callModelStream(messages);
 
     for await (const chunk of stream) {
+      const visibleContent = filterAssistantChunk(chunk.content);
+      if (!visibleContent) {
+        if (chunk.usage) lastUsage = chunk.usage;
+        continue;
+      }
       if (fullText === "") {
         msgBody.innerHTML = "";
         msgBody.classList.add("typing-active");
       }
-      fullText += chunk.content;
+      fullText += visibleContent;
 
       while (displayedText.length < fullText.length) {
         const charGap = fullText.length - displayedText.length;
