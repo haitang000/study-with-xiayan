@@ -21,10 +21,14 @@ const apiKeyInput = document.getElementById("apiKeyInput");
 const saveApiKeyBtn = document.getElementById("saveApiKeyBtn");
 const clearApiKeyBtn = document.getElementById("clearApiKeyBtn");
 const closeSettingsBtn = document.getElementById("closeSettingsBtn");
-const fastModelSelect = document.getElementById("fastModelSelect");
-const thinkingModelSelect = document.getElementById("thinkingModelSelect");
+const providerSelect = document.getElementById("providerSelect");
+const baseUrlInput = document.getElementById("baseUrlInput");
+const fastModelInput = document.getElementById("fastModelInput");
+const thinkingModelInput = document.getElementById("thinkingModelInput");
 const modeToast = document.createElement("div");
 const USER_API_KEY_STORAGE = "moonshot_api_key";
+const PROVIDER_STORAGE = "llm_provider";
+const BASE_URL_STORAGE = "llm_base_url";
 const FAST_MODEL_STORAGE = "fast_mode_model";
 const THINKING_MODEL_STORAGE = "thinking_mode_model";
 let currentMode = "fast";
@@ -127,22 +131,63 @@ function getUserApiKey() {
 }
 
 function getConfiguredModeModel(mode) {
-  const defaultModel = MODE_DEFAULT_MODEL[mode] || "kimi-latest";
+  const provider = getProvider();
+  const defaultModel = getDefaultModelForProvider(provider, mode);
   const storageKey = mode === "thinking" ? THINKING_MODEL_STORAGE : FAST_MODEL_STORAGE;
   try {
-    const val = localStorage.getItem(storageKey);
-    return val && MODEL_CONFIGS[val] ? val : defaultModel;
+    const val = localStorage.getItem(storageKey)?.trim();
+    if (!val) return defaultModel;
+    if (provider === "proxy") return MODEL_CONFIGS[val] ? val : defaultModel;
+    return val;
   } catch {
     return defaultModel;
   }
 }
 
 function setConfiguredModeModel(mode, modelKey) {
-  if (!MODEL_CONFIGS[modelKey]) return;
   const storageKey = mode === "thinking" ? THINKING_MODEL_STORAGE : FAST_MODEL_STORAGE;
+  if (!modelKey) return;
   try {
-    localStorage.setItem(storageKey, modelKey);
+    localStorage.setItem(storageKey, modelKey.trim());
   } catch {}
+}
+
+function getProvider() {
+  try {
+    return localStorage.getItem(PROVIDER_STORAGE) || "proxy";
+  } catch {
+    return "proxy";
+  }
+}
+
+function getDefaultModelForProvider(provider, mode) {
+  const defaults = {
+    proxy: MODE_DEFAULT_MODEL,
+    moonshot: { fast: "moonshot-v1-8k", thinking: "moonshot-v1-32k" },
+    openai: { fast: "gpt-4o-mini", thinking: "gpt-4.1" },
+    deepseek: { fast: "deepseek-chat", thinking: "deepseek-reasoner" },
+    siliconflow: { fast: "Qwen/Qwen2.5-7B-Instruct", thinking: "deepseek-ai/DeepSeek-R1" },
+    custom: { fast: "gpt-4o-mini", thinking: "gpt-4.1" },
+  };
+  const map = defaults[provider] || defaults.proxy;
+  return map[mode] || map.fast;
+}
+
+function getProviderBaseUrl(provider) {
+  const map = {
+    moonshot: "https://api.moonshot.cn/v1/chat/completions",
+    openai: "https://api.openai.com/v1/chat/completions",
+    deepseek: "https://api.deepseek.com/v1/chat/completions",
+    siliconflow: "https://api.siliconflow.cn/v1/chat/completions",
+  };
+  if (provider === "custom") {
+    try {
+      return localStorage.getItem(BASE_URL_STORAGE)?.trim() || "";
+    } catch {
+      return "";
+    }
+  }
+  return map[provider] || "";
 }
 
 function setSettingsModalOpen(open) {
@@ -236,19 +281,25 @@ function parseApiError(data, fallback) {
 }
 
 async function* callModelStream(messages, configKey = syncModelWithMode()) {
-  const config = MODEL_CONFIGS[configKey];
+  const provider = getProvider();
+  const isProxy = provider === "proxy";
+  const config = MODEL_CONFIGS[configKey] || MODEL_CONFIGS[MODE_DEFAULT_MODEL.fast];
+  const modelName = isProxy
+    ? config.model
+    : getConfiguredModeModel(currentMode);
   const userApiKey = getUserApiKey();
-  const requestUrl = userApiKey
-    ? "https://api.moonshot.cn/v1/chat/completions"
-    : config.url;
+  const requestUrl = isProxy ? config.url : getProviderBaseUrl(provider);
   const payload = {
-    model: config.model,
+    model: modelName,
     messages,
     stream: true,
   };
 
   const headers = { "Content-Type": "application/json" };
-  if (userApiKey) headers.Authorization = `Bearer ${userApiKey}`;
+  if (!isProxy && userApiKey) headers.Authorization = `Bearer ${userApiKey}`;
+
+  if (!requestUrl) throw new Error("请在设置中填写有效的 API Base URL");
+  if (!isProxy && !userApiKey) throw new Error("请先在设置中填写 API Key");
 
   const response = await fetch(requestUrl, {
     method: "POST",
@@ -305,7 +356,7 @@ async function initGreeting() {
 
     let fullText = "";
     let displayedText = "";
-    const stream = callModelStream(messages, "moonshot-v1-32k");
+    const stream = callModelStream(messages);
 
     for await (const chunk of stream) {
       if (fullText === "") {
@@ -540,10 +591,15 @@ askForm.addEventListener("submit", async (e) => {
 });
 
 settingsBtn?.addEventListener("click", () => {
+  const provider = getProvider();
   apiKeyInput.value = getUserApiKey();
-  if (fastModelSelect) fastModelSelect.value = getConfiguredModeModel("fast");
-  if (thinkingModelSelect)
-    thinkingModelSelect.value = getConfiguredModeModel("thinking");
+  if (providerSelect) providerSelect.value = provider;
+  if (baseUrlInput)
+    baseUrlInput.value =
+      provider === "custom" ? getProviderBaseUrl("custom") : "";
+  if (fastModelInput) fastModelInput.value = getConfiguredModeModel("fast");
+  if (thinkingModelInput)
+    thinkingModelInput.value = getConfiguredModeModel("thinking");
   setSettingsModalOpen(true);
   setTimeout(() => apiKeyInput?.focus(), 50);
 });
@@ -557,10 +613,19 @@ settingsModal?.addEventListener("click", (e) => {
 saveApiKeyBtn?.addEventListener("click", () => {
   const key = apiKeyInput.value.trim();
   try {
+    const provider = providerSelect?.value || "proxy";
+    localStorage.setItem(PROVIDER_STORAGE, provider);
     if (key) localStorage.setItem(USER_API_KEY_STORAGE, key);
-    const fastModel = fastModelSelect?.value || MODE_DEFAULT_MODEL.fast;
+    if (provider === "custom") {
+      localStorage.setItem(BASE_URL_STORAGE, (baseUrlInput?.value || "").trim());
+    } else {
+      localStorage.removeItem(BASE_URL_STORAGE);
+    }
+    const fastModel =
+      fastModelInput?.value.trim() || getDefaultModelForProvider(provider, "fast");
     const thinkingModel =
-      thinkingModelSelect?.value || MODE_DEFAULT_MODEL.thinking;
+      thinkingModelInput?.value.trim() ||
+      getDefaultModelForProvider(provider, "thinking");
     setConfiguredModeModel("fast", fastModel);
     setConfiguredModeModel("thinking", thinkingModel);
     showModeTip("设置已保存");
@@ -573,12 +638,15 @@ saveApiKeyBtn?.addEventListener("click", () => {
 clearApiKeyBtn?.addEventListener("click", () => {
   try {
     localStorage.removeItem(USER_API_KEY_STORAGE);
+    localStorage.removeItem(PROVIDER_STORAGE);
+    localStorage.removeItem(BASE_URL_STORAGE);
     localStorage.removeItem(FAST_MODEL_STORAGE);
     localStorage.removeItem(THINKING_MODEL_STORAGE);
     apiKeyInput.value = "";
-    if (fastModelSelect) fastModelSelect.value = MODE_DEFAULT_MODEL.fast;
-    if (thinkingModelSelect)
-      thinkingModelSelect.value = MODE_DEFAULT_MODEL.thinking;
+    if (providerSelect) providerSelect.value = "proxy";
+    if (baseUrlInput) baseUrlInput.value = "";
+    if (fastModelInput) fastModelInput.value = MODE_DEFAULT_MODEL.fast;
+    if (thinkingModelInput) thinkingModelInput.value = MODE_DEFAULT_MODEL.thinking;
     showModeTip("已清除并恢复默认模型");
   } catch {
     showModeTip("清除失败");
