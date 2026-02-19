@@ -52,7 +52,7 @@ const MODEL_CONFIGS = {
   },
   "moonshot-v1-32k": {
     url: "https://api.xiayan.icu/kimi/v1/chat/completions?pwd=haitang000",
-    model: "moonshot-v1-32k",
+    model: "moonshot-v1-8k",
   },
 };
 
