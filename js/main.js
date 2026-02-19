@@ -13,8 +13,13 @@ const ctxBar = document.getElementById("ctxBar");
 const ctxText = document.getElementById("ctxText");
 const characterBubble = document.getElementById("characterBubble");
 const askSubmitBtn = askForm.querySelector('button[type="submit"]');
-const modelSelect = document.getElementById("modelSelect");
-const modeSelect = document.getElementById("modeSelect");
+const modeSwitch = document.getElementById("modeSwitch");
+const modeButtons = Array.from(document.querySelectorAll(".mode-btn"));
+const modeToast = document.createElement("div");
+let currentMode = "fast";
+
+modeToast.className = "mode-toast";
+document.body.appendChild(modeToast);
 
 marked.use({
   breaks: true,
@@ -22,9 +27,9 @@ marked.use({
 });
 
 const MODEL_CONFIGS = {
-  "gemini-3-flash": {
-    url: "https://api.xiayan.icu/gemini/v1/chat/completions?pwd=haitang000",
-    model: "gemini-3-flash",
+  "kimi-latest": {
+    url: "https://api.xiayan.icu/kimi/v1/chat/completions?pwd=haitang000",
+    model: "kimi-latest",
   },
   "kimi-2.5": {
     url: "https://api.xiayan.icu/kimi/v1/chat/completions?pwd=haitang000",
@@ -39,6 +44,11 @@ const MODEL_CONFIGS = {
 const MODE_INSTRUCTIONS = {
   fast: "【快速模式】请直接给出答案，保持简洁明了。",
   thinking: "【深度思考模式】请一步步思考，详细展示推导过程，并分析关键细节。",
+};
+
+const MODE_DEFAULT_MODEL = {
+  fast: "kimi-latest",
+  thinking: "kimi-2.5",
 };
 
 const DEFAULT_SYSTEM_PROMPT = "";
@@ -84,6 +94,27 @@ function updateCharacterBubble(text) {
     characterBubble.style.opacity = "1";
     characterBubble.style.transform = "translateY(0)";
   }, 300);
+}
+
+function syncModelWithMode() {
+  return MODE_DEFAULT_MODEL[currentMode] || "kimi-latest";
+}
+
+function setMode(mode) {
+  currentMode = mode;
+  modeButtons.forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.mode === mode);
+  });
+}
+
+let toastTimer = null;
+function showModeTip(text) {
+  modeToast.textContent = text;
+  modeToast.classList.add("show");
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    modeToast.classList.remove("show");
+  }, 1800);
 }
 
 function appendMsg(text, options = {}) {
@@ -157,7 +188,7 @@ function parseApiError(data, fallback) {
   return fallback || "接口调用失败，请稍后重试。";
 }
 
-async function* callModelStream(messages, configKey = modelSelect.value) {
+async function* callModelStream(messages, configKey = syncModelWithMode()) {
   const config = MODEL_CONFIGS[configKey];
   const payload = {
     model: config.model,
@@ -214,7 +245,7 @@ async function initGreeting() {
       {
         role: "user",
         content:
-          "（华生进屋了，你抬头看见她，自然地打个招呼吧。记得保持你的性格特点，不要输出Markdown，不要解释设定。）",
+          "（华生来了，你抬头看见她，自然地打个招呼吧。记得保持你的性格特点，不要输出Markdown，不要解释设定。）",
       },
     ];
 
@@ -322,7 +353,7 @@ explainBtn.addEventListener("click", async () => {
   setBusy(true);
   try {
     await systemPromptReady;
-    const modePrompt = MODE_INSTRUCTIONS[modeSelect.value];
+    const modePrompt = MODE_INSTRUCTIONS[currentMode];
     const userPrompt = `${modePrompt}\n请讲解这道题。先给最终结论，再给完整步骤推导（分点编号），最后给易错点和检查方法。`;
     const messages = [
       { role: "system", content: SYSTEM_PROMPT },
@@ -407,7 +438,7 @@ askForm.addEventListener("submit", async (e) => {
   }));
   try {
     await systemPromptReady;
-    const modePrompt = MODE_INSTRUCTIONS[modeSelect.value];
+    const modePrompt = MODE_INSTRUCTIONS[currentMode];
     const fullQuery = `${modePrompt}\n${q}`;
     const messages = [
       { role: "system", content: SYSTEM_PROMPT },
@@ -457,6 +488,19 @@ askForm.addEventListener("submit", async (e) => {
 document.getElementById("escBtn").addEventListener("click", () => {
   appendMsg("已退出沉浸模式。");
 });
+
+modeSwitch?.addEventListener("click", (e) => {
+  const btn = e.target.closest(".mode-btn");
+  if (!btn) return;
+  const mode = btn.dataset.mode;
+  if (!mode || mode === currentMode) return;
+  setMode(mode);
+  if (mode === "thinking") {
+    alert("来自作者的话:\n思考模式所使用的模型由于种种原因成本较高, 快速所使用的模型也不是那么不堪。如果不是要处理特别复杂的题目, 建议还是使用快速模式哦~");
+  }
+});
+
+setMode("fast");
 
 timeTip.textContent = formatTime();
 initGreeting();

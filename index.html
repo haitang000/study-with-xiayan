@@ -21,16 +21,12 @@
       <div class="left-top">
         <button class="esc" id="escBtn"><i class="fa-solid fa-xmark"></i><br><small>ESC</small></button>
         <div class="status">
-          <div class="status-head">◆ 模型配置</div>
+          <div class="status-head">◆ 模式选择</div>
           <div class="config-group">
-            <select id="modelSelect">
-              <option value="kimi-2.5">Kimi K2.5</option>
-              <option value="gemini-3-flash">Gemini 3 Flash</option>
-            </select>
-            <select id="modeSelect">
-              <option value="fast">快速</option>
-              <option value="thinking">思考</option>
-            </select>
+            <div class="mode-switch" id="modeSwitch" role="tablist" aria-label="模式选择">
+              <button type="button" class="mode-btn active" data-mode="fast" data-tip="快速模式：更简洁、更快返回结果">快速</button>
+              <button type="button" class="mode-btn" data-mode="thinking" data-tip="思考模式：更详细展示推导与分析">思考</button>
+            </div>
           </div>
           <div class="status-bar" style="margin-top: 8px;"><div class="status-fill" id="ctxBar"></div></div>
           <div class="status-sub" id="ctxText">12.8k</div>
