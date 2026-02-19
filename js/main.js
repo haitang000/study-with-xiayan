@@ -8,6 +8,7 @@ const placeholder = document.getElementById("placeholder");
 const chatFeed = document.getElementById("chatFeed");
 const askForm = document.getElementById("askForm");
 const askInput = document.getElementById("askInput");
+const draftInput = document.getElementById("draft");
 const timeTip = document.getElementById("timeTip");
 const ctxBar = document.getElementById("ctxBar");
 const ctxText = document.getElementById("ctxText");
@@ -348,7 +349,12 @@ function createAssistantContentFilter() {
   };
 }
 
-async function* callModelStream(messages, configKey = syncModelWithMode()) {
+async function* callModelStream(
+  messages,
+  configKey = syncModelWithMode(),
+  options = {},
+) {
+  const targetMode = options.modeOverride || currentMode;
   const provider = getProvider();
   const isProxy = provider === "proxy";
   const noAuthProviders = new Set([
@@ -357,13 +363,13 @@ async function* callModelStream(messages, configKey = syncModelWithMode()) {
     "native_gemini",
   ]);
   const requiresApiKey = !noAuthProviders.has(provider);
-  const proxyFallbackKey = getProxyModelByMode(currentMode);
+  const proxyFallbackKey = getProxyModelByMode(targetMode);
   const config = MODEL_CONFIGS[configKey] || MODEL_CONFIGS[proxyFallbackKey];
   if (isProxy && !config)
     throw new Error("内置代理模型配置缺失，请在设置中切换为可用模型");
   const modelName = isProxy
     ? config.model
-    : getConfiguredModeModel(currentMode);
+    : getConfiguredModeModel(targetMode);
   const userApiKey = getUserApiKey();
   const requestUrl = isProxy ? config.url : getProviderBaseUrl(provider);
   const payload = {
@@ -416,6 +422,43 @@ async function* callModelStream(messages, configKey = syncModelWithMode()) {
       } catch (e) {}
     }
   }
+}
+
+async function summarizeToDraft(question, answer) {
+  if (!draftInput || !answer?.trim()) return;
+  try {
+    const summaryMessages = [
+      {
+        role: "system",
+        content:
+          "你是学习笔记整理助手。请把问答整理成简洁笔记，输出纯文本，不要Markdown，不要<think>标签。结构：题目要点、核心思路、关键步骤、易错点。",
+      },
+      {
+        role: "user",
+        content: `问题：\n${question}\n\n回答：\n${answer}\n\n请整理为可直接抄写的学习笔记。`,
+      },
+    ];
+
+    const filterAssistantChunk = createAssistantContentFilter();
+    let summaryText = "";
+    const stream = callModelStream(
+      summaryMessages,
+      getConfiguredModeModel("fast"),
+      { modeOverride: "fast" },
+    );
+
+    for await (const chunk of stream) {
+      const visibleContent = filterAssistantChunk(chunk.content);
+      if (visibleContent) summaryText += visibleContent;
+    }
+
+    const note = summaryText.trim();
+    if (!note) return;
+    draftInput.value = draftInput.value.trim()
+      ? `${draftInput.value.trim()}\n\n——\n${note}`
+      : note;
+    draftInput.scrollTop = draftInput.scrollHeight;
+  } catch (error) {}
 }
 
 async function initGreeting() {
@@ -593,6 +636,7 @@ explainBtn.addEventListener("click", async () => {
       content: "我上传了一道题目图片，请你完整讲解。",
     });
     conversation.push({ role: "assistant", content: fullText });
+    await summarizeToDraft("我上传了一道题目图片，请你完整讲解。", fullText);
     updateCharacterBubble("讲解完成。你可以继续追问“为什么这么做”。");
     if (lastUsage) updateContextByUsage(lastUsage);
   } catch (error) {
@@ -674,6 +718,7 @@ askForm.addEventListener("submit", async (e) => {
       .forEach((el) => hljs.highlightElement(el));
     conversation.push({ role: "user", content: q });
     conversation.push({ role: "assistant", content: fullText });
+    await summarizeToDraft(q, fullText);
     if (lastUsage) updateContextByUsage(lastUsage);
   } catch (error) {
     if (thinkingMsg) thinkingMsg.remove();
