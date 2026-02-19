@@ -87,23 +87,32 @@
   <div class="settings-modal" id="settingsModal" aria-hidden="true">
     <div class="settings-card">
       <div class="settings-title">聊天设置</div>
+      <div class="settings-fields">
+        <div class="settings-field">
+          <label for="providerSelect">模型供应商</label>
+          <select id="providerSelect">
+            <option value="proxy">内置代理（当前默认）</option>
+            <option value="moonshot">Moonshot 官方</option>
+            <option value="openai">OpenAI 官方</option>
+            <option value="deepseek">DeepSeek 官方</option>
+            <option value="siliconflow">SiliconFlow</option>
+            <option value="custom">自定义 OpenAI 兼容</option>
+          </select>
+        </div>
+        <div class="settings-field">
+          <label for="baseUrlInput">API Base URL</label>
+          <input id="baseUrlInput" type="text" placeholder="https://api.example.com/v1/chat/completions" autocomplete="off" />
+        </div>
+      </div>
       <input id="apiKeyInput" type="password" placeholder="请输入你的 Moonshot API Key" autocomplete="off" />
       <div class="settings-fields">
         <div class="settings-field">
           <label for="fastModelSelect">快速模式模型</label>
-          <select id="fastModelSelect">
-            <option value="kimi-latest">Kimi Latest</option>
-            <option value="kimi-2.5">Kimi K2.5</option>
-            <option value="moonshot-v1-32k">Moonshot V1 32K</option>
-          </select>
+          <input id="fastModelInput" type="text" placeholder="例如：gpt-4o-mini / deepseek-chat" autocomplete="off" />
         </div>
         <div class="settings-field">
           <label for="thinkingModelSelect">思考模式模型</label>
-          <select id="thinkingModelSelect">
-            <option value="kimi-latest">Kimi Latest</option>
-            <option value="kimi-2.5">Kimi K2.5</option>
-            <option value="moonshot-v1-32k">Moonshot V1 32K</option>
-          </select>
+          <input id="thinkingModelInput" type="text" placeholder="例如：gpt-4.1 / deepseek-reasoner" autocomplete="off" />
         </div>
       </div>
       <div class="settings-actions">
