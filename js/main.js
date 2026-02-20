@@ -27,6 +27,7 @@ const settingsModal = document.getElementById("settingsModal");
 const apiKeyInput = document.getElementById("apiKeyInput");
 const saveApiKeyBtn = document.getElementById("saveApiKeyBtn");
 const resetDefaultModelsBtn = document.getElementById("resetDefaultModelsBtn");
+const defaultTitleInput = document.getElementById("defaultTitleInput");
 const clearApiKeyBtn = document.getElementById("clearApiKeyBtn");
 const closeSettingsBtn = document.getElementById("closeSettingsBtn");
 const providerSelect = document.getElementById("providerSelect");
@@ -41,6 +42,7 @@ const FAST_MODEL_STORAGE = "fast_mode_model";
 const THINKING_MODEL_STORAGE = "thinking_mode_model";
 const CHAT_SESSIONS_STORAGE = "chat_session_records";
 const CHAT_ACTIVE_SESSION_STORAGE = "chat_active_session_id";
+const CHAT_DEFAULT_TITLE_STORAGE = "chat_default_title";
 let currentMode = "fast";
 let currentSessionId = "";
 
@@ -78,10 +80,86 @@ function getStoredSessions() {
   }
 }
 
+function trimSessionPayload(
+  sessions,
+  options = { maxCharsPerMessage: 1200, maxMessagesPerSession: 30, maxSessions: 25 },
+) {
+  const {
+    maxCharsPerMessage = 1200,
+    maxMessagesPerSession = 30,
+    maxSessions = 25,
+  } = options || {};
+
+  return (Array.isArray(sessions) ? sessions : [])
+    .slice(-maxSessions)
+    .map((session) => ({
+      ...session,
+      messages: Array.isArray(session.messages)
+        ? session.messages
+            .slice(-maxMessagesPerSession)
+            .map((msg) => ({
+              ...msg,
+              text: String(msg?.text || "").slice(-maxCharsPerMessage),
+            }))
+            .filter((msg) => msg.text)
+        : [],
+    }))
+    .filter((session) => Array.isArray(session.messages) && session.messages.length);
+}
+
 function saveSessions(sessions) {
+  const normalizedSessions = trimSessionPayload(Array.isArray(sessions) ? sessions : []);
   try {
-    localStorage.setItem(CHAT_SESSIONS_STORAGE, JSON.stringify(sessions.slice(-40)));
+    localStorage.setItem(CHAT_SESSIONS_STORAGE, JSON.stringify(normalizedSessions));
+    return;
   } catch {}
+
+  // 存储空间不足时，逐步压缩最新会话内容，再移除更早会话，尽可能保留最近记录。
+  const working = normalizedSessions.map((session) => ({
+    ...session,
+    messages: Array.isArray(session.messages) ? [...session.messages] : [],
+  }));
+
+  const charLimits = [2500, 1500, 800, 400, 200];
+
+  while (working.length) {
+    try {
+      localStorage.setItem(CHAT_SESSIONS_STORAGE, JSON.stringify(working));
+      return;
+    } catch {}
+
+    const newest = working[working.length - 1];
+    if (newest?.messages?.length > 8) {
+      newest.messages = newest.messages.slice(-8);
+      newest.updatedAt = formatTime();
+      continue;
+    }
+
+    let compressed = false;
+    for (const limit of charLimits) {
+      const nextMessages = (newest?.messages || []).map((msg) => ({
+        ...msg,
+        text: String(msg?.text || "").slice(-limit),
+      }));
+      if (JSON.stringify(nextMessages) !== JSON.stringify(newest?.messages || [])) {
+        newest.messages = nextMessages;
+        newest.updatedAt = formatTime();
+        compressed = true;
+        break;
+      }
+    }
+    if (compressed) continue;
+
+    if (newest?.messages?.length > 2) {
+      newest.messages = newest.messages.slice(-2);
+      newest.updatedAt = formatTime();
+      continue;
+    }
+
+    working.shift();
+  }
+
+  // 最终兜底：不要清空已有历史，避免在存储不可用时把原记录覆盖掉。
 }
 
 function setCurrentSessionId(sessionId) {
@@ -103,7 +181,28 @@ function getActiveSessionId() {
   }
 }
 
-function createSession(initialTitle = "新的对话") {
+function getDefaultSessionTitle() {
+  try {
+    const title = localStorage.getItem(CHAT_DEFAULT_TITLE_STORAGE)?.trim() || "";
+    return title || "新的对话";
+  } catch {
+    return "新的对话";
+  }
+}
+
+function setDefaultSessionTitle(title) {
+  const normalized = String(title || "").trim().slice(0, 24);
+  try {
+    if (normalized) {
+      localStorage.setItem(CHAT_DEFAULT_TITLE_STORAGE, normalized);
+    } else {
+      localStorage.removeItem(CHAT_DEFAULT_TITLE_STORAGE);
+    }
+  } catch {}
+  return normalized || "新的对话";
+}
+
+function createSession(initialTitle = getDefaultSessionTitle()) {
   const sessions = getStoredSessions();
   const session = {
     id: buildSessionId(),
@@ -154,7 +253,7 @@ function updateSession(sessionId, updater) {
 }
 
 function appendSessionMessage(role, text) {
-  const content = String(text || "").trim();
+  const content = String(text || "").trim().slice(-1200);
   if (!content) return;
   const session = getCurrentSession();
   if (!session) return;
@@ -162,48 +261,6 @@ function appendSessionMessage(role, text) {
     item.messages = item.messages || [];
     item.messages.push({ role, text: content, time: formatTime() });
     item.updatedAt = formatTime();
-    return item;
-  });
-  renderHistoryList();
-}
-
-async function summarizeSessionTitle(sessionId) {
-  const session = getStoredSessions().find((item) => item.id === sessionId);
-  if (!session || session.messages.length < 2) return;
-  if (session.title && session.title !== "新的对话") return;
-
-  const sample = session.messages
-    .slice(0, 6)
-    .map((item) => `${item.role === "user" ? "用户" : "AI"}：${item.text}`)
-    .join("\n");
-
-  let title = "";
-  try {
-    const stream = callModelStream(
-      [
-        {
-          role: "system",
-          content:
-            "请把对话总结成一个简短标题，只输出标题本身，不超过18个中文字符，不要标点和引号。",
-        },
-        { role: "user", content: sample },
-      ],
-      getConfiguredModeModel("fast"),
-      { modeOverride: "fast" },
-    );
-    for await (const chunk of stream) {
-      if (chunk.content) title += chunk.content;
-    }
-  } catch {}
-
-  title = title.replace(/[\n\r"'“”‘’]/g, "").trim();
-  if (!title) {
-    const firstUser = session.messages.find((item) => item.role === "user")?.text || "新的对话";
-    title = firstUser.slice(0, 18);
-  }
-  const finalTitle = title.slice(0, 18) || "新的对话";
-  updateSession(sessionId, (item) => {
-    item.title = finalTitle;
     return item;
   });
   renderHistoryList();
@@ -278,6 +335,7 @@ function openSettingsPanel() {
   if (fastModelInput) fastModelInput.value = getConfiguredModeModel("fast");
   if (thinkingModelInput)
     thinkingModelInput.value = getConfiguredModeModel("thinking");
+  if (defaultTitleInput) defaultTitleInput.value = getDefaultSessionTitle();
   setSettingsModalOpen(true);
   setTimeout(() => apiKeyInput?.focus(), 50);
 }
@@ -936,7 +994,6 @@ explainBtn.addEventListener("click", async () => {
     msgBody.classList.remove("typing-active");
     renderRichContent(msgBody, fullText);
     appendSessionMessage("assistant", fullText);
-    summarizeSessionTitle(currentSessionId);
     conversation.push({
       role: "user",
       content: "我上传了一道题目图片，请你完整讲解。",
@@ -1022,7 +1079,6 @@ askForm.addEventListener("submit", async (e) => {
     msgBody.classList.remove("typing-active");
     renderRichContent(msgBody, fullText);
     appendSessionMessage("assistant", fullText);
-    summarizeSessionTitle(currentSessionId);
     conversation.push({ role: "user", content: q });
     conversation.push({ role: "assistant", content: fullText });
     await summarizeToDraft(q, fullText);
@@ -1053,7 +1109,7 @@ clearHistoryBtn?.addEventListener("click", () => {
     clearPreview();
     explainBtn.classList.remove("btn-pulse");
     fileInput.value = "";
-    const session = createSession("新的对话");
+    const session = createSession(getDefaultSessionTitle());
     loadSession(session.id);
     initGreeting();
     showModeTip("已创建新对话");
@@ -1113,6 +1169,7 @@ saveApiKeyBtn?.addEventListener("click", () => {
     }
     setConfiguredModeModel("fast", fastModel);
     setConfiguredModeModel("thinking", thinkingModel);
+    setDefaultSessionTitle(defaultTitleInput?.value || "");
     showModeTip("设置已保存");
     setSettingsModalOpen(false);
   } catch {
@@ -1127,11 +1184,13 @@ clearApiKeyBtn?.addEventListener("click", () => {
     localStorage.removeItem(BASE_URL_STORAGE);
     localStorage.removeItem(FAST_MODEL_STORAGE);
     localStorage.removeItem(THINKING_MODEL_STORAGE);
+    localStorage.removeItem(CHAT_DEFAULT_TITLE_STORAGE);
     apiKeyInput.value = "";
     if (providerSelect) providerSelect.value = "proxy_default";
     if (baseUrlInput) baseUrlInput.value = "";
     if (fastModelInput) fastModelInput.value = getProxyModelByMode("fast");
     if (thinkingModelInput) thinkingModelInput.value = getProxyModelByMode("thinking");
+    if (defaultTitleInput) defaultTitleInput.value = "新的对话";
     showModeTip("已清除并恢复默认模型");
   } catch {
     showModeTip("清除失败");
@@ -1151,6 +1210,8 @@ resetDefaultModelsBtn?.addEventListener("click", () => {
     if (baseUrlInput) baseUrlInput.value = "";
     if (fastModelInput) fastModelInput.value = fastModel;
     if (thinkingModelInput) thinkingModelInput.value = thinkingModel;
+    if (defaultTitleInput) defaultTitleInput.value = "新的对话";
+    setDefaultSessionTitle("");
     showModeTip("已恢复默认：快速 DeepSeek，思考 Kimi");
   } catch {
     showModeTip("恢复默认失败");
