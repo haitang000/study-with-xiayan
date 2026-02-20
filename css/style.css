@@ -997,7 +997,9 @@ body {
   border-radius: 10px;
   background: #fff9e8;
   padding: 8px 10px;
+  padding-right: 72px;
   cursor: pointer;
+  position: relative;
 }
 
 .history-item.active {
@@ -1011,6 +1013,9 @@ body {
   color: #5c4523;
   font-weight: 700;
   margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .history-meta {
@@ -1023,7 +1028,60 @@ body {
   font-size: 13px;
   line-height: 1.45;
   color: #4a3c28;
-  word-break: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-all;
+}
+
+.history-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transform: translateY(-2px);
+  pointer-events: none;
+  transition: all 0.18s ease;
+}
+
+.history-item:hover .history-actions,
+.history-item:focus-within .history-actions {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.history-action-btn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid #e7c678;
+  border-radius: 7px;
+  background: #fff6de;
+  color: #946d2c;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.history-action-btn:hover {
+  background: #ffefc9;
+}
+
+.history-action-btn.danger {
+  color: #b4593f;
+  border-color: #efc2b3;
+  background: #fff1ec;
+}
+
+.history-action-btn.danger:hover {
+  background: #ffe5dc;
 }
 
 .history-empty {

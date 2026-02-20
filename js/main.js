@@ -486,6 +486,58 @@ function loadSession(sessionId) {
   setSidebarOpen(false);
 }
 
+function renameSession(sessionId) {
+  const session = getStoredSessions().find((item) => item.id === sessionId);
+  if (!session) return;
+  const nextTitle = window.prompt("重命名对话", session.title || "新的对话");
+  if (nextTitle === null) return;
+  const finalTitle = nextTitle.trim().slice(0, 24);
+  if (!finalTitle) {
+    showModeTip("名称不能为空");
+    return;
+  }
+  updateSession(sessionId, (item) => {
+    item.title = finalTitle;
+    item.updatedAt = formatTime();
+    return item;
+  });
+  renderHistoryList();
+  showModeTip("已重命名");
+}
+
+function deleteSession(sessionId) {
+  const sessions = getStoredSessions();
+  const target = sessions.find((item) => item.id === sessionId);
+  if (!target) return;
+  const ok = window.confirm(`确认删除“${target.title || "新的对话"}”吗？`);
+  if (!ok) return;
+
+  const remaining = sessions.filter((item) => item.id !== sessionId);
+  saveSessions(remaining);
+
+  if (sessionId !== currentSessionId) {
+    renderHistoryList();
+    showModeTip("已删除对话");
+    return;
+  }
+
+  if (remaining.length) {
+    const latest = remaining
+      .slice()
+      .sort((a, b) => getSessionSortTimestamp(b) - getSessionSortTimestamp(a))[0];
+    loadSession(latest.id);
+    showModeTip("已删除对话");
+    return;
+  }
+
+  chatFeed.innerHTML = "";
+  clearPreview();
+  const newSession = createSession("新的对话");
+  loadSession(newSession.id);
+  initGreeting();
+  showModeTip("已删除对话");
+}
+
 function renderHistoryList() {
   if (!historyList) return;
   const sessions = getStoredSessions();
@@ -502,9 +554,10 @@ function renderHistoryList() {
     .slice()
     .sort((a, b) => getSessionSortTimestamp(b) - getSessionSortTimestamp(a))
     .forEach((item) => {
-      const row = document.createElement("button");
-      row.type = "button";
+      const row = document.createElement("div");
       row.className = "history-item";
+      row.setAttribute("role", "button");
+      row.tabIndex = 0;
       if (item.id === currentSessionId) row.classList.add("active");
 
       const meta = document.createElement("div");
@@ -519,8 +572,41 @@ function renderHistoryList() {
       preview.className = "history-text";
       preview.textContent = item.messages[item.messages.length - 1]?.text || "";
 
-      row.append(meta, title, preview);
+      const actions = document.createElement("div");
+      actions.className = "history-actions";
+
+      const renameBtn = document.createElement("button");
+      renameBtn.type = "button";
+      renameBtn.className = "history-action-btn";
+      renameBtn.title = "重命名";
+      renameBtn.setAttribute("aria-label", "重命名对话");
+      renameBtn.innerHTML = '<i class="fa-solid fa-pen"></i>';
+      renameBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        renameSession(item.id);
+      });
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "history-action-btn danger";
+      deleteBtn.title = "删除";
+      deleteBtn.setAttribute("aria-label", "删除对话");
+      deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+      deleteBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteSession(item.id);
+      });
+
+      actions.append(renameBtn, deleteBtn);
+
+      row.append(meta, title, preview, actions);
       row.addEventListener("click", () => loadSession(item.id));
+      row.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          loadSession(item.id);
+        }
+      });
       historyList.appendChild(row);
     });
 }
