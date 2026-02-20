@@ -17,7 +17,12 @@ const characterBubble = document.getElementById("characterBubble");
 const askSubmitBtn = askForm.querySelector('button[type="submit"]');
 const modeSwitch = document.getElementById("modeSwitch");
 const modeButtons = Array.from(document.querySelectorAll(".mode-btn"));
-const settingsBtn = document.getElementById("settingsBtn");
+const moreBtn = document.getElementById("moreBtn");
+const sidebarOverlay = document.getElementById("sidebarOverlay");
+const sidebarCloseBtn = document.getElementById("sidebarCloseBtn");
+const openSettingsBtn = document.getElementById("openSettingsBtn");
+const historyList = document.getElementById("historyList");
+const clearHistoryBtn = document.getElementById("clearHistoryBtn");
 const settingsModal = document.getElementById("settingsModal");
 const apiKeyInput = document.getElementById("apiKeyInput");
 const saveApiKeyBtn = document.getElementById("saveApiKeyBtn");
@@ -34,10 +39,80 @@ const PROVIDER_STORAGE = "llm_provider";
 const BASE_URL_STORAGE = "llm_base_url";
 const FAST_MODEL_STORAGE = "fast_mode_model";
 const THINKING_MODEL_STORAGE = "thinking_mode_model";
+const CHAT_HISTORY_STORAGE = "chat_history_records";
 let currentMode = "fast";
 
 modeToast.className = "mode-toast";
 document.body.appendChild(modeToast);
+
+function getStoredHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(CHAT_HISTORY_STORAGE) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(records) {
+  try {
+    localStorage.setItem(CHAT_HISTORY_STORAGE, JSON.stringify(records.slice(-80)));
+  } catch {}
+}
+
+function renderHistoryList() {
+  if (!historyList) return;
+  const records = getStoredHistory();
+  historyList.innerHTML = "";
+  if (!records.length) {
+    const empty = document.createElement("div");
+    empty.className = "history-empty";
+    empty.textContent = "还没有记录，开始一段新对话吧。";
+    historyList.appendChild(empty);
+    return;
+  }
+
+  records.slice().reverse().forEach((item) => {
+    const row = document.createElement("article");
+    row.className = "history-item";
+    const meta = document.createElement("div");
+    meta.className = "history-meta";
+    meta.textContent = `${item.role === "user" ? "你" : "夏彦"} · ${item.time || ""}`;
+    const text = document.createElement("div");
+    text.className = "history-text";
+    text.textContent = item.text || "";
+    row.append(meta, text);
+    historyList.appendChild(row);
+  });
+}
+
+function recordHistory(role, text) {
+  const content = (text || "").trim();
+  if (!content) return;
+  const records = getStoredHistory();
+  records.push({ role, text: content, time: formatTime() });
+  saveHistory(records);
+  renderHistoryList();
+}
+
+function setSidebarOpen(open) {
+  if (!sidebarOverlay) return;
+  sidebarOverlay.classList.toggle("show", open);
+  sidebarOverlay.setAttribute("aria-hidden", open ? "false" : "true");
+}
+
+function openSettingsPanel() {
+  const provider = getProvider();
+  apiKeyInput.value = getUserApiKey();
+  if (providerSelect) providerSelect.value = provider;
+  if (baseUrlInput)
+    baseUrlInput.value =
+      provider === "custom" ? getProviderBaseUrl("custom") : "";
+  if (fastModelInput) fastModelInput.value = getConfiguredModeModel("fast");
+  if (thinkingModelInput)
+    thinkingModelInput.value = getConfiguredModeModel("thinking");
+  setSettingsModalOpen(true);
+  setTimeout(() => apiKeyInput?.focus(), 50);
+}
 
 marked.use({
   breaks: true,
@@ -310,6 +385,7 @@ function appendMsg(text, options = {}) {
   article.appendChild(body);
   chatFeed.appendChild(article);
   chatFeed.scrollTop = chatFeed.scrollHeight;
+  if (!thinking) recordHistory(role, text);
   return { article, body };
 }
 
@@ -555,6 +631,7 @@ async function initGreeting() {
     }
     msgBody.classList.remove("typing-active");
     renderRichContent(msgBody, fullText);
+    recordHistory("assistant", fullText);
     conversation.push({ role: "assistant", content: fullText });
   } catch (e) {
     msgBody.classList.add("error-box");
@@ -682,6 +759,7 @@ explainBtn.addEventListener("click", async () => {
 
     msgBody.classList.remove("typing-active");
     renderRichContent(msgBody, fullText);
+    recordHistory("assistant", fullText);
     conversation.push({
       role: "user",
       content: "我上传了一道题目图片，请你完整讲解。",
@@ -765,6 +843,7 @@ askForm.addEventListener("submit", async (e) => {
 
     msgBody.classList.remove("typing-active");
     renderRichContent(msgBody, fullText);
+    recordHistory("assistant", fullText);
     conversation.push({ role: "user", content: q });
     conversation.push({ role: "assistant", content: fullText });
     await summarizeToDraft(q, fullText);
@@ -777,18 +856,27 @@ askForm.addEventListener("submit", async (e) => {
   }
 });
 
-settingsBtn?.addEventListener("click", () => {
-  const provider = getProvider();
-  apiKeyInput.value = getUserApiKey();
-  if (providerSelect) providerSelect.value = provider;
-  if (baseUrlInput)
-    baseUrlInput.value =
-      provider === "custom" ? getProviderBaseUrl("custom") : "";
-  if (fastModelInput) fastModelInput.value = getConfiguredModeModel("fast");
-  if (thinkingModelInput)
-    thinkingModelInput.value = getConfiguredModeModel("thinking");
-  setSettingsModalOpen(true);
-  setTimeout(() => apiKeyInput?.focus(), 50);
+moreBtn?.addEventListener("click", () => setSidebarOpen(true));
+
+sidebarCloseBtn?.addEventListener("click", () => setSidebarOpen(false));
+
+sidebarOverlay?.addEventListener("click", (e) => {
+  if (e.target === sidebarOverlay) setSidebarOpen(false);
+});
+
+openSettingsBtn?.addEventListener("click", () => {
+  setSidebarOpen(false);
+  openSettingsPanel();
+});
+
+clearHistoryBtn?.addEventListener("click", () => {
+  try {
+    localStorage.removeItem(CHAT_HISTORY_STORAGE);
+    renderHistoryList();
+    showModeTip("对话记录已清空");
+  } catch {
+    showModeTip("清空失败");
+  }
 });
 
 closeSettingsBtn?.addEventListener("click", () => setSettingsModalOpen(false));
@@ -889,7 +977,12 @@ resetDefaultModelsBtn?.addEventListener("click", () => {
 exportMdBtn?.addEventListener("click", exportDraftAsMarkdown);
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && settingsModal?.classList.contains("show")) {
+  if (e.key !== "Escape") return;
+  if (sidebarOverlay?.classList.contains("show")) {
+    setSidebarOpen(false);
+    return;
+  }
+  if (settingsModal?.classList.contains("show")) {
     setSettingsModalOpen(false);
   }
 });
@@ -908,4 +1001,5 @@ modeSwitch?.addEventListener("click", (e) => {
 setMode("fast");
 
 timeTip.textContent = formatTime();
+renderHistoryList();
 initGreeting();
