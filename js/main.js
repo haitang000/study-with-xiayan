@@ -764,6 +764,9 @@ async function summarizeToDraft(question, answer) {
 }
 
 async function initGreeting() {
+  if (!getCurrentSession(false)) {
+    createSession("日常对话");
+  }
   await systemPromptReady;
   const { body: msgBody } = appendMsg("", { thinking: true });
 
@@ -803,6 +806,7 @@ async function initGreeting() {
     msgBody.classList.remove("typing-active");
     renderRichContent(msgBody, fullText);
     conversation.push({ role: "assistant", content: fullText });
+    appendSessionMessage("assistant", fullText);
   } catch (e) {
     msgBody.classList.add("error-box");
     msgBody.innerHTML =
