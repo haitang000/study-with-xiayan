@@ -14,11 +14,18 @@ const timeTip = document.getElementById("timeTip");
 const ctxRing = document.getElementById("ctxRing");
 const ctxPct = document.getElementById("ctxPct");
 const ctxText = document.getElementById("ctxText");
+const questionCard = document.getElementById("questionCard");
 const characterBubble = document.getElementById("characterBubble");
 const askSubmitBtn = askForm.querySelector('button[type="submit"]');
+const cameraBtn = document.getElementById("cameraBtn");
+const cameraInput = document.getElementById("cameraInput");
+const scrollBottomBtn = document.getElementById("scrollBottomBtn");
+const mobileTabButtons = Array.from(document.querySelectorAll(".mobile-tabbar .tab-btn"));
 const modeSwitch = document.getElementById("modeSwitch");
 const modeButtons = Array.from(document.querySelectorAll(".mode-btn"));
 const moreBtn = document.getElementById("moreBtn");
+const chatPanel = document.querySelector("main.chat");
+const draftPanel = document.querySelector("aside.draft");
 const sidebarOverlay = document.getElementById("sidebarOverlay");
 const sidebarDrawer = document.getElementById("sidebarDrawer");
 const sidebarCloseBtn = document.getElementById("sidebarCloseBtn");
@@ -71,8 +78,22 @@ let sidebarCloseTimer = null;
 let currentContextWindowTokens = DEFAULT_CONTEXT_WINDOW_TOKENS;
 const contextProbePending = new Map();
 
+function detectMobileLikeDevice() {
+  const hasTouch =
+    "ontouchstart" in window ||
+    navigator.maxTouchPoints > 0 ||
+    navigator.msMaxTouchPoints > 0;
+  return window.matchMedia("(max-width: 980px)").matches && hasTouch;
+}
+
+function syncMobileUiClass() {
+  document.body.classList.toggle("is-mobile", detectMobileLikeDevice());
+}
+
 modeToast.className = "mode-toast";
 document.body.appendChild(modeToast);
+syncMobileUiClass();
+window.addEventListener("resize", syncMobileUiClass);
 
 function buildSessionId() {
   return `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -1280,10 +1301,38 @@ function clearPreview(resetConversation = true) {
   refreshContextMeter();
 }
 
-pickBtn.addEventListener("click", () => fileInput.click());
+function setActiveMobileTab(tab) {
+  if (!mobileTabButtons.length) return;
+  mobileTabButtons.forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.tab === tab);
+  });
+}
 
-fileInput.addEventListener("change", async (e) => {
-  const file = e.target.files?.[0];
+function scrollToTabSection(tab) {
+  if (tab === "chat") {
+    chatFeed?.scrollTo({ top: chatFeed.scrollHeight, behavior: "smooth" });
+    chatPanel?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  if (tab === "question") {
+    questionCard?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  if (tab === "draft") {
+    draftPanel?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function updateScrollBottomBtnVisibility() {
+  if (!scrollBottomBtn || !chatFeed) return;
+  const distanceToBottom = chatFeed.scrollHeight - chatFeed.clientHeight - chatFeed.scrollTop;
+  const hidden = distanceToBottom < 80;
+  scrollBottomBtn.style.opacity = hidden ? "0" : "1";
+  scrollBottomBtn.style.pointerEvents = hidden ? "none" : "auto";
+}
+
+async function handleImageFileSelection(file, options = {}) {
+  const fromCamera = !!options.fromCamera;
   if (!file) return;
 
   if (!file.type.startsWith("image/")) {
@@ -1314,10 +1363,29 @@ fileInput.addEventListener("change", async (e) => {
   }
 
   timeTip.textContent = formatTime();
-  updateCharacterBubble(`已收到题目《${file.name}》，点“讲解”开始。`);
+  const sourceText = fromCamera ? "拍照" : "上传";
+  updateCharacterBubble(`已收到${sourceText}题目《${file.name}》，点“讲解”开始。`);
   appendMsg(`收到你的题目：${file.name}。你可以点“讲解”，我会给你完整思路。`);
   explainBtn.classList.add("btn-pulse");
+  setActiveMobileTab("question");
+  questionCard?.scrollIntoView({ behavior: "smooth", block: "start" });
   refreshContextMeter();
+}
+
+pickBtn.addEventListener("click", () => fileInput.click());
+
+cameraBtn?.addEventListener("click", () => cameraInput?.click());
+
+fileInput.addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  await handleImageFileSelection(file, { fromCamera: false });
+  fileInput.value = "";
+});
+
+cameraInput?.addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  await handleImageFileSelection(file, { fromCamera: true });
+  cameraInput.value = "";
 });
 
 explainBtn.addEventListener("click", async () => {
@@ -1409,6 +1477,7 @@ clearBtn.addEventListener("click", () => {
   explainBtn.classList.remove("btn-pulse");
   fileInput.value = "";
   appendMsg("题目已清空。重新上传后我会继续讲解。");
+  setActiveMobileTab("question");
 });
 
 askForm.addEventListener("submit", async (e) => {
@@ -1493,6 +1562,27 @@ sidebarCloseBtn?.addEventListener("click", () => setSidebarOpen(false));
 
 sidebarOverlay?.addEventListener("click", (e) => {
   if (e.target === sidebarOverlay) setSidebarOpen(false);
+});
+
+scrollBottomBtn?.addEventListener("click", () => {
+  chatFeed?.scrollTo({ top: chatFeed.scrollHeight, behavior: "smooth" });
+});
+
+chatFeed?.addEventListener("scroll", updateScrollBottomBtnVisibility);
+
+mobileTabButtons.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const tab = btn.dataset.tab;
+    if (!tab) return;
+    if (tab === "settings") {
+      setSidebarOpen(true);
+      setActiveMobileTab("settings");
+      return;
+    }
+    setSidebarOpen(false);
+    setActiveMobileTab(tab);
+    scrollToTabSection(tab);
+  });
 });
 
 openSettingsBtn?.addEventListener("click", () => {
@@ -1642,6 +1732,8 @@ modeSwitch?.addEventListener("click", (e) => {
 
 askInput?.addEventListener("input", () => {
   refreshContextMeter(askInput.value || "");
+  askInput.style.height = "auto";
+  askInput.style.height = `${Math.min(140, askInput.scrollHeight)}px`;
 });
 
 baseUrlInput?.addEventListener("input", () => {
@@ -1669,4 +1761,6 @@ if (initialSession) {
   renderHistoryList();
   initGreeting();
 }
+setActiveMobileTab("chat");
+updateScrollBottomBtnVisibility();
 refreshContextMeter();

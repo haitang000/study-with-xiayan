@@ -423,6 +423,43 @@ body {
   grid-template-columns: 1fr 100px;
   gap: 10px;
   min-height: 230px;
+  position: relative;
+}
+
+.camera-btn,
+.scroll-bottom-btn,
+.mobile-tabbar {
+  display: none;
+}
+
+.camera-btn {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  width: 44px;
+  height: 44px;
+  border: 2px solid #efcc6f;
+  border-radius: 999px;
+  background: linear-gradient(120deg, #fff8e4, #ffeec1);
+  color: #b6812d;
+  font-size: 18px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 6px 14px rgba(130, 94, 31, 0.18);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
+}
+
+.camera-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 16px rgba(130, 94, 31, 0.2);
+}
+
+.camera-btn:active {
+  transform: translateY(0) scale(0.97);
 }
 
 .preview-box {
@@ -694,15 +731,23 @@ body {
   min-height: 54px;
 }
 
-.ask input {
+.ask input,
+.ask textarea {
   border: none;
   outline: none;
   flex: 1;
   min-width: 0;
   font-size: 18px;
-  padding: 0 16px;
+  padding: 12px 16px;
   color: #333;
   font-family: "Noto Serif SC", "Microsoft YaHei", serif;
+  background: transparent;
+}
+
+.ask textarea {
+  resize: none;
+  line-height: 1.45;
+  max-height: 140px;
 }
 
 .ask button {
@@ -1259,6 +1304,76 @@ body {
   box-shadow: 0 4px 10px rgba(176, 128, 46, 0.14);
 }
 
+.scroll-bottom-btn {
+  position: absolute;
+  right: 16px;
+  bottom: 86px;
+  width: 42px;
+  height: 42px;
+  border: 2px solid #efcc6f;
+  border-radius: 999px;
+  background: #fff4d7;
+  color: #a9752d;
+  box-shadow: 0 8px 16px rgba(115, 80, 26, 0.2);
+  cursor: pointer;
+  z-index: 4;
+  transition:
+    transform 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.scroll-bottom-btn:hover {
+  transform: translateY(-1px);
+  background: #ffedc0;
+}
+
+.scroll-bottom-btn:active {
+  transform: scale(0.96);
+}
+
+.mobile-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(62px + env(safe-area-inset-bottom, 0px));
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+  background: rgba(255, 250, 235, 0.95);
+  border-top: 1px solid #ebcb83;
+  backdrop-filter: blur(8px);
+  z-index: 10002;
+  display: none;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tab-btn {
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: #8d7b58;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 11px;
+  font-family: "Trebuchet MS", "Microsoft YaHei", sans-serif;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab-btn i {
+  font-size: 16px;
+}
+
+.tab-btn.active {
+  background: #fff3d2;
+  color: #b87d2f;
+  border-color: #f0cd7f;
+  box-shadow: 0 3px 9px rgba(174, 123, 44, 0.18);
+}
+
 button,
 input,
 select,
@@ -1309,7 +1424,7 @@ textarea {
     padding: 12px;
     padding-top: calc(12px + env(safe-area-inset-top, 0px));
     padding-right: calc(12px + env(safe-area-inset-right, 0px));
-    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(86px + env(safe-area-inset-bottom, 0px));
     padding-left: calc(12px + env(safe-area-inset-left, 0px));
   }
 
@@ -1364,6 +1479,7 @@ textarea {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
+    padding-right: 54px;
   }
 
   .q-actions button {
@@ -1381,6 +1497,8 @@ textarea {
   .chat-feed {
     padding: 0 12px;
     gap: 10px;
+    padding-bottom: 74px;
+    scroll-padding-bottom: 82px;
   }
 
   .msg-body {
@@ -1389,17 +1507,18 @@ textarea {
   }
 
   .ask {
-    position: sticky;
-    bottom: 0;
+    position: relative;
+    bottom: auto;
     z-index: 3;
     background: #fff;
     margin: 0 10px 10px;
     min-height: 46px;
   }
 
-  .ask input {
+  .ask input,
+  .ask textarea {
     font-size: 16px;
-    padding: 0 12px;
+    padding: 10px 12px;
   }
 
   .ask button {
@@ -1418,6 +1537,25 @@ textarea {
 
   .draft-box textarea {
     font-size: 16px;
+  }
+
+  body.is-mobile .camera-btn,
+  body.is-mobile .scroll-bottom-btn,
+  body.is-mobile .mobile-tabbar {
+    display: inline-flex;
+  }
+
+  body.is-mobile .mobile-tabbar {
+    display: grid;
+  }
+
+  body.is-mobile .scroll-bottom-btn {
+    position: fixed;
+    right: 14px;
+    bottom: calc(126px + env(safe-area-inset-bottom, 0px));
+    width: 40px;
+    height: 40px;
+    z-index: 8;
   }
 }
 
@@ -1572,6 +1710,14 @@ textarea {
     padding: 8px;
   }
 
+  .camera-btn {
+    width: 40px;
+    height: 40px;
+    right: 10px;
+    top: 10px;
+    font-size: 16px;
+  }
+
   .chat-feed {
     padding: 0 8px;
   }
@@ -1585,6 +1731,7 @@ textarea {
   .q-actions {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
+    padding-right: 50px;
   }
 
   .q-actions button {

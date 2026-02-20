@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#111827" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <title>Study With 夏彦</title>
   <link
     rel="stylesheet"
@@ -11,6 +14,8 @@
     referrerpolicy="no-referrer"
   />
   <link rel="icon" href="assets/img/avatar.png" />
+  <link rel="apple-touch-icon" href="assets/img/avatar.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
   <link rel="stylesheet" href="css/style.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
@@ -55,7 +60,7 @@
     <main class="chat panel">
       <div class="head">◆ 正在讲解...</div>
 
-      <section class="question-card">
+      <section class="question-card" id="questionCard">
         <div class="preview-box" id="previewBox">
           <img id="previewImg" alt="题目预览" />
           <div class="placeholder" id="placeholder">
@@ -71,13 +76,24 @@
           <div class="tip" id="timeTip"></div>
         </div>
 
+        <!-- 移动端相机直拍按钮 -->
+        <button type="button" class="camera-btn" id="cameraBtn" aria-label="拍照上传">
+          <i class="fa-solid fa-camera"></i>
+        </button>
+
         <input id="fileInput" type="file" accept="image/*" hidden />
+        <input id="cameraInput" type="file" accept="image/*" capture="environment" hidden />
       </section>
 
       <section class="chat-feed" id="chatFeed"></section>
 
+      <!-- 滚动到底部按钮 -->
+      <button type="button" class="scroll-bottom-btn" id="scrollBottomBtn" aria-label="滚动到底部">
+        <i class="fa-solid fa-chevron-down"></i>
+      </button>
+
       <form class="ask" id="askForm" autocomplete="off">
-        <input
+        <textarea
           id="askInput"
           name="ask_no_history"
           placeholder="有什么不懂的，尽管问"
@@ -85,8 +101,9 @@
           autocapitalize="off"
           autocorrect="off"
           spellcheck="false"
-        />
-        <button type="submit"><i class="fa-regular fa-paper-plane"></i>发送</button>
+          rows="1"
+        ></textarea>
+        <button type="submit"><i class="fa-regular fa-paper-plane"></i><span class="send-label">发送</span></button>
       </form>
 
       <section class="context-meter" aria-label="上下文计算">
@@ -112,6 +129,26 @@
       </div>
     </aside>
   </div>
+
+  <!-- 移动端底部标签栏 -->
+  <nav class="mobile-tabbar" id="mobileTabbar" aria-label="主导航">
+    <button type="button" class="tab-btn active" data-tab="chat" aria-label="对话">
+      <i class="fa-solid fa-comments"></i>
+      <span>对话</span>
+    </button>
+    <button type="button" class="tab-btn" data-tab="question" aria-label="题目">
+      <i class="fa-solid fa-image"></i>
+      <span>题目</span>
+    </button>
+    <button type="button" class="tab-btn" data-tab="draft" aria-label="笔记">
+      <i class="fa-solid fa-book"></i>
+      <span>笔记</span>
+    </button>
+    <button type="button" class="tab-btn" data-tab="settings" aria-label="更多" id="tabMoreBtn">
+      <i class="fa-solid fa-bars"></i>
+      <span>更多</span>
+    </button>
+  </nav>
 
   <div class="sidebar-overlay" id="sidebarOverlay" aria-hidden="true">
     <aside class="sidebar-drawer" id="sidebarDrawer" aria-label="更多功能">
