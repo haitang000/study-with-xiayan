@@ -1,1 +1,4 @@
 js/env.local.js
+.vercel
+.env*.local
+/node_modules
