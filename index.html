@@ -17,6 +17,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <script>
+    window.__STUDY_ENV__ = window.__STUDY_ENV__ || {};
+  </script>
+  <script src="js/env.local.js" onerror="window.__STUDY_ENV__=window.__STUDY_ENV__||{}"></script>
 </head>
 <body>
   <div class="app">
@@ -27,8 +31,14 @@
           <div class="status-head">◆ 模式选择</div>
           <div class="config-group">
             <div class="mode-switch" id="modeSwitch" role="tablist" aria-label="模式选择">
-              <button type="button" class="mode-btn active" data-mode="fast" data-tip="快速模式：更简洁、更快返回结果">快速</button>
-              <button type="button" class="mode-btn" data-mode="thinking" data-tip="思考模式：更详细展示推导与分析">思考</button>
+              <button type="button" class="mode-btn active" data-mode="fast" data-tip="快速模式：更简洁、更快返回结果">
+                <i class="fa-solid fa-bolt" aria-hidden="true"></i>
+                <span>快速</span>
+              </button>
+              <button type="button" class="mode-btn" data-mode="thinking" data-tip="思考模式：更详细展示推导与分析">
+                <i class="fa-solid fa-brain" aria-hidden="true"></i>
+                <span>思考</span>
+              </button>
             </div>
           </div>
         </div>
@@ -77,6 +87,16 @@
         />
         <button type="submit"><i class="fa-regular fa-paper-plane"></i>发送</button>
       </form>
+
+      <section class="context-meter" aria-label="上下文计算">
+        <div class="context-ring" id="ctxRing" style="--p:0">
+          <span id="ctxPct">0%</span>
+        </div>
+        <div class="context-meter-meta">
+          <div class="context-meter-title">上下文</div>
+          <div id="ctxText">0 / 32k tokens</div>
+        </div>
+      </section>
     </main>
 
     <aside class="draft panel">

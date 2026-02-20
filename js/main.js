@@ -11,7 +11,8 @@ const askInput = document.getElementById("askInput");
 const draftInput = document.getElementById("draft");
 const exportMdBtn = document.getElementById("exportMdBtn");
 const timeTip = document.getElementById("timeTip");
-const ctxBar = document.getElementById("ctxBar");
+const ctxRing = document.getElementById("ctxRing");
+const ctxPct = document.getElementById("ctxPct");
 const ctxText = document.getElementById("ctxText");
 const characterBubble = document.getElementById("characterBubble");
 const askSubmitBtn = askForm.querySelector('button[type="submit"]');
@@ -35,23 +36,202 @@ const baseUrlInput = document.getElementById("baseUrlInput");
 const fastModelInput = document.getElementById("fastModelInput");
 const thinkingModelInput = document.getElementById("thinkingModelInput");
 const modeToast = document.createElement("div");
+const RUNTIME_ENV =
+  typeof window !== "undefined" && window.__STUDY_ENV__
+    ? window.__STUDY_ENV__
+    : {};
+
+function readRuntimeEnv(key) {
+  const value = String(RUNTIME_ENV?.[key] || "").trim();
+  // 若部署时未做变量替换（如 __API_URL__），按未配置处理
+  if (/^__.+__$/.test(value)) return "";
+  return value;
+}
+
+const PROXY_ENDPOINTS = {
+  deepseek: readRuntimeEnv("PROXY_DEEPSEEK_URL"),
+  kimi: readRuntimeEnv("PROXY_KIMI_URL"),
+  gemini: readRuntimeEnv("PROXY_GEMINI_URL"),
+};
+
 const USER_API_KEY_STORAGE = "moonshot_api_key";
 const PROVIDER_STORAGE = "llm_provider";
 const BASE_URL_STORAGE = "llm_base_url";
 const FAST_MODEL_STORAGE = "fast_mode_model";
 const THINKING_MODEL_STORAGE = "thinking_mode_model";
+const MODEL_CONTEXT_CACHE_STORAGE = "model_context_window_cache";
 const CHAT_SESSIONS_STORAGE = "chat_session_records";
 const CHAT_ACTIVE_SESSION_STORAGE = "chat_active_session_id";
 let currentMode = "fast";
 let currentSessionId = "";
 const SIDEBAR_ANIM_DURATION = 220;
+const DEFAULT_CONTEXT_WINDOW_TOKENS = 32768;
+const CONTEXT_PROBE_TIMEOUT = 3500;
 let sidebarCloseTimer = null;
+let currentContextWindowTokens = DEFAULT_CONTEXT_WINDOW_TOKENS;
+const contextProbePending = new Map();
 
 modeToast.className = "mode-toast";
 document.body.appendChild(modeToast);
 
 function buildSessionId() {
   return `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function formatContextWindowLabel(tokens) {
+  const value = Math.max(1024, Number(tokens) || DEFAULT_CONTEXT_WINDOW_TOKENS);
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  return `${Math.round(value / 1024)}k`;
+}
+
+function buildContextCacheKey(provider, modelName, requestUrl) {
+  return `${provider || "unknown"}::${String(modelName || "").toLowerCase()}::${String(requestUrl || "")}`;
+}
+
+function getContextWindowCache() {
+  try {
+    const cache = JSON.parse(localStorage.getItem(MODEL_CONTEXT_CACHE_STORAGE) || "{}");
+    return cache && typeof cache === "object" ? cache : {};
+  } catch {
+    return {};
+  }
+}
+
+function setContextWindowCache(key, tokens) {
+  if (!key || !tokens) return;
+  try {
+    const cache = getContextWindowCache();
+    cache[key] = {
+      tokens: Math.max(1024, Number(tokens) || DEFAULT_CONTEXT_WINDOW_TOKENS),
+      updatedAt: Date.now(),
+    };
+    localStorage.setItem(MODEL_CONTEXT_CACHE_STORAGE, JSON.stringify(cache));
+  } catch {}
+}
+
+function getContextWindowFromCache(key) {
+  if (!key) return 0;
+  const cache = getContextWindowCache();
+  const hit = cache[key];
+  return hit?.tokens ? Number(hit.tokens) : 0;
+}
+
+function inferContextWindowByModelName(modelName) {
+  const name = String(modelName || "").toLowerCase();
+  if (!name) return DEFAULT_CONTEXT_WINDOW_TOKENS;
+
+  const numK = name.match(/(\d{1,4})k/);
+  if (numK) return Number(numK[1]) * 1024;
+
+  if (name.includes("gpt-4.1") || name.includes("o1") || name.includes("o3")) return 200_000;
+  if (name.includes("gpt-4o") || name.includes("claude")) return 128 * 1024;
+  if (name.includes("gemini") && (name.includes("1.5") || name.includes("2.5"))) return 1_000_000;
+  if (name.includes("deepseek-reasoner")) return 64 * 1024;
+  if (name.includes("deepseek-chat")) return 64 * 1024;
+  if (name.includes("moonshot-v1-32k")) return 32 * 1024;
+  if (name.includes("moonshot-v1-8k")) return 8 * 1024;
+  if (name.includes("qwen") || name.includes("kimi")) return 128 * 1024;
+
+  return DEFAULT_CONTEXT_WINDOW_TOKENS;
+}
+
+function getActiveModelRuntimeInfo(targetMode = currentMode) {
+  const provider = getProvider();
+  const isProxy = provider === "proxy" || provider === "proxy_default";
+  const modelKey = getConfiguredModeModel(targetMode);
+  const proxyFallbackKey = getProxyModelByMode(targetMode);
+  const config = MODEL_CONFIGS[modelKey] || MODEL_CONFIGS[proxyFallbackKey] || null;
+  const modelName = isProxy ? config?.model || modelKey : modelKey;
+  const requestUrl = isProxy ? config?.url || "" : getProviderBaseUrl(provider);
+  return { provider, modelName, requestUrl };
+}
+
+function guessModelsEndpoint(requestUrl) {
+  const url = String(requestUrl || "").trim();
+  if (!url) return "";
+  if (url.includes("/chat/completions")) return url.replace(/\/chat\/completions.*$/i, "/models");
+  if (/\/v\d+\/?$/i.test(url)) return `${url.replace(/\/?$/, "")}/models`;
+  return "";
+}
+
+async function probeContextWindowFromApi(provider, modelName, requestUrl) {
+  const modelsUrl = guessModelsEndpoint(requestUrl);
+  if (!modelsUrl) return 0;
+
+  const noAuthProviders = new Set([
+    "proxy",
+    "proxy_default",
+    "native_deepseek",
+    "native_gemini",
+  ]);
+  const requiresApiKey = !noAuthProviders.has(provider);
+  const userApiKey = getUserApiKey();
+  if (requiresApiKey && !userApiKey) return 0;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CONTEXT_PROBE_TIMEOUT);
+  try {
+    const headers = {};
+    if (requiresApiKey) headers.Authorization = `Bearer ${userApiKey}`;
+    const res = await fetch(modelsUrl, { headers, signal: controller.signal });
+    if (!res.ok) return 0;
+    const data = await res.json().catch(() => ({}));
+    const list = Array.isArray(data?.data) ? data.data : [];
+    const target =
+      list.find((item) => item?.id === modelName) ||
+      list.find((item) => String(item?.id || "").toLowerCase().includes(String(modelName || "").toLowerCase())) ||
+      null;
+    const candidate = target || data || {};
+    const fields = [
+      candidate.context_window,
+      candidate.max_context_length,
+      candidate.input_token_limit,
+      candidate.max_input_tokens,
+      candidate.max_tokens,
+    ];
+    const fromApi = fields.find((v) => Number(v) > 0);
+    return fromApi ? Number(fromApi) : 0;
+  } catch {
+    return 0;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function updateModelContextWindow(targetMode = currentMode) {
+  const { provider, modelName, requestUrl } = getActiveModelRuntimeInfo(targetMode);
+  const cacheKey = buildContextCacheKey(provider, modelName, requestUrl);
+  const cached = getContextWindowFromCache(cacheKey);
+  if (cached) {
+    currentContextWindowTokens = cached;
+    refreshContextMeter(askInput?.value || "");
+  } else {
+    currentContextWindowTokens = inferContextWindowByModelName(modelName);
+    refreshContextMeter(askInput?.value || "");
+  }
+
+  if (!requestUrl || !modelName) return;
+  if (contextProbePending.has(cacheKey)) return;
+
+  const task = (async () => {
+    const probed = await probeContextWindowFromApi(provider, modelName, requestUrl);
+    if (probed > 0) {
+      currentContextWindowTokens = probed;
+      setContextWindowCache(cacheKey, probed);
+      refreshContextMeter(askInput?.value || "");
+    }
+  })();
+
+  contextProbePending.set(cacheKey, task);
+  try {
+    await task;
+  } finally {
+    contextProbePending.delete(cacheKey);
+  }
+}
+
+function triggerContextWindowRefresh(targetMode = currentMode) {
+  updateModelContextWindow(targetMode).catch(() => {});
 }
 
 function getStoredSessions() {
@@ -435,19 +615,19 @@ marked.use({
 
 const MODEL_CONFIGS = {
   "deepseek-chat": {
-    url: "https://api.xiayan.icu/deepseek/v1/chat/completions?pwd=haitang000",
+    url: PROXY_ENDPOINTS.deepseek,
     model: "deepseek-chat",
   },
   "kimi-latest": {
-    url: "https://api.xiayan.icu/kimi/v1/chat/completions?pwd=haitang000",
+    url: PROXY_ENDPOINTS.kimi,
     model: "kimi-latest",
   },
-  "kimi-2.5": {
-    url: "https://api.xiayan.icu/kimi/v1/chat/completions?pwd=haitang000",
+  "kimi-k2.5": {
+    url: PROXY_ENDPOINTS.kimi,
     model: "kimi-k2.5",
   },
   "moonshot-v1-32k": {
-    url: "https://api.xiayan.icu/kimi/v1/chat/completions?pwd=haitang000",
+    url: PROXY_ENDPOINTS.kimi,
     model: "moonshot-v1-32k",
   },
 };
@@ -462,7 +642,7 @@ const PERSONA_REINFORCEMENT =
 
 const MODE_DEFAULT_MODEL = {
   fast: "deepseek-chat",
-  thinking: "kimi-2.5",
+  thinking: "kimi-k2.5",
 };
 
 const DEFAULT_SYSTEM_PROMPT = "";
@@ -496,6 +676,50 @@ function formatTime() {
   return `${y}/${m}/${d} ${hh}:${mm}`;
 }
 
+function estimateTokensFromText(text) {
+  const source = String(text || "").trim();
+  if (!source) return 0;
+  try {
+    const bytes = new TextEncoder().encode(source).length;
+    return Math.max(1, Math.ceil(bytes / 4));
+  } catch {
+    return Math.max(1, Math.ceil(source.length / 2));
+  }
+}
+
+function computeContextTokens(extraInput = "") {
+  let total = 0;
+  total += estimateTokensFromText(SYSTEM_PROMPT);
+  total += estimateTokensFromText(MODE_INSTRUCTIONS[currentMode] || "");
+  total += estimateTokensFromText(PERSONA_REINFORCEMENT);
+
+  conversation.forEach((item) => {
+    total += estimateTokensFromText(item?.content || "");
+  });
+
+  if (uploadedDataUrl) {
+    // 图片输入在多模态模型中会占用额外 token，这里给出近似估算值。
+    total += 1200;
+  }
+
+  total += estimateTokensFromText(extraInput);
+  return Math.max(0, total);
+}
+
+function paintContextMeter(tokens) {
+  if (!ctxText) return;
+  const safeTokens = Math.max(0, Math.floor(tokens || 0));
+  const windowSize = Math.max(1024, Number(currentContextWindowTokens) || DEFAULT_CONTEXT_WINDOW_TOKENS);
+  const percent = Math.min(100, (safeTokens / windowSize) * 100);
+  if (ctxRing) ctxRing.style.setProperty("--p", percent.toFixed(2));
+  if (ctxPct) ctxPct.textContent = `${Math.round(percent)}%`;
+  ctxText.textContent = `${safeTokens.toLocaleString("zh-CN")} / ${formatContextWindowLabel(windowSize)} tokens`;
+}
+
+function refreshContextMeter(extraInput = "") {
+  paintContextMeter(computeContextTokens(extraInput));
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -519,6 +743,7 @@ function setMode(mode) {
   modeButtons.forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.mode === mode);
   });
+  triggerContextWindowRefresh(mode);
 }
 
 function getUserApiKey() {
@@ -594,10 +819,8 @@ function getDefaultModelForProvider(provider, mode) {
 
 function getProviderBaseUrl(provider) {
   const map = {
-    native_gemini:
-      "https://api.xiayan.icu/gemini/v1/chat/completions?pwd=haitang000",
-    native_deepseek:
-      "https://api.xiayan.icu/deepseek/v1/chat/completions?pwd=haitang000",
+    native_gemini: PROXY_ENDPOINTS.gemini,
+    native_deepseek: PROXY_ENDPOINTS.deepseek,
     moonshot: "https://api.moonshot.cn/v1/chat/completions",
     openai: "https://api.openai.com/v1/chat/completions",
     deepseek: "https://api.deepseek.com/v1/chat/completions",
@@ -707,11 +930,7 @@ function appendMsg(text, options = {}) {
 }
 
 function increaseContext() {
-  if (!ctxBar || !ctxText) return;
-  const current = parseFloat(ctxBar.style.width || "32");
-  const next = Math.min(95, current + Math.random() * 8 + 2);
-  ctxBar.style.width = `${next}%`;
-  ctxText.textContent = `${(next * 0.4).toFixed(1)}k`;
+  refreshContextMeter();
 }
 
 function setBusy(state) {
@@ -723,15 +942,12 @@ function setBusy(state) {
 }
 
 function updateContextByUsage(usage) {
-  if (!ctxBar || !ctxText) return;
+  if (!ctxText) return;
   if (!usage || typeof usage.total_tokens !== "number") {
-    increaseContext();
+    refreshContextMeter();
     return;
   }
-  const total = usage.total_tokens;
-  const pct = Math.max(32, Math.min(95, (total / 3000) * 100));
-  ctxBar.style.width = `${pct}%`;
-  ctxText.textContent = `${(total / 1000).toFixed(1)}k`;
+  paintContextMeter(usage.total_tokens);
 }
 
 function fileToDataUrl(file) {
@@ -815,6 +1031,8 @@ async function* callModelStream(
   const config = MODEL_CONFIGS[configKey] || MODEL_CONFIGS[proxyFallbackKey];
   if (isProxy && !config)
     throw new Error("内置代理模型配置缺失，请在设置中切换为可用模型");
+  if (isProxy && !config?.url)
+    throw new Error("内置代理地址未配置，请通过环境变量注入 PROXY_*_URL");
   const modelName = isProxy
     ? config.model
     : getConfiguredModeModel(targetMode);
@@ -973,6 +1191,7 @@ function clearPreview(resetConversation = true) {
   characterBubble.textContent =
     "把题目发给我，我会先给你结论，再一步一步解释为什么这样做。";
   if (resetConversation) conversation.length = 0;
+  refreshContextMeter();
 }
 
 pickBtn.addEventListener("click", () => fileInput.click());
@@ -1012,7 +1231,7 @@ fileInput.addEventListener("change", async (e) => {
   updateCharacterBubble(`已收到题目《${file.name}》，点“讲解”开始。`);
   appendMsg(`收到你的题目：${file.name}。你可以点“讲解”，我会给你完整思路。`);
   explainBtn.classList.add("btn-pulse");
-  increaseContext();
+  refreshContextMeter();
 });
 
 explainBtn.addEventListener("click", async () => {
@@ -1115,6 +1334,7 @@ askForm.addEventListener("submit", async (e) => {
   appendMsg(q, { role: "user" });
   appendSessionMessage("user", q);
   askInput.value = "";
+  refreshContextMeter();
   setBusy(true);
 
   let thinkingMsg = null;
@@ -1223,17 +1443,20 @@ providerSelect?.addEventListener("change", () => {
   if (provider === "proxy" || provider === "proxy_default") {
     if (fastModelInput) fastModelInput.value = getProxyModelByMode("fast");
     if (thinkingModelInput) thinkingModelInput.value = getProxyModelByMode("thinking");
+    triggerContextWindowRefresh(currentMode);
     return;
   }
   if (provider === "native_gemini") {
     if (fastModelInput) fastModelInput.value = "gemini-2.0-flash";
     if (thinkingModelInput) thinkingModelInput.value = "gemini-2.5-pro";
+    triggerContextWindowRefresh(currentMode);
     return;
   }
   if (provider === "deepseek" || provider === "native_deepseek") {
     if (fastModelInput) fastModelInput.value = "deepseek-chat";
     if (thinkingModelInput) thinkingModelInput.value = "deepseek-reasoner";
   }
+  triggerContextWindowRefresh(currentMode);
 });
 
 saveApiKeyBtn?.addEventListener("click", () => {
@@ -1259,6 +1482,7 @@ saveApiKeyBtn?.addEventListener("click", () => {
     }
     setConfiguredModeModel("fast", fastModel);
     setConfiguredModeModel("thinking", thinkingModel);
+    triggerContextWindowRefresh(currentMode);
     showModeTip("设置已保存");
     setSettingsModalOpen(false);
   } catch {
@@ -1278,6 +1502,7 @@ clearApiKeyBtn?.addEventListener("click", () => {
     if (baseUrlInput) baseUrlInput.value = "";
     if (fastModelInput) fastModelInput.value = getProxyModelByMode("fast");
     if (thinkingModelInput) thinkingModelInput.value = getProxyModelByMode("thinking");
+    triggerContextWindowRefresh(currentMode);
     showModeTip("已清除并恢复默认模型");
   } catch {
     showModeTip("清除失败");
@@ -1297,6 +1522,7 @@ resetDefaultModelsBtn?.addEventListener("click", () => {
     if (baseUrlInput) baseUrlInput.value = "";
     if (fastModelInput) fastModelInput.value = fastModel;
     if (thinkingModelInput) thinkingModelInput.value = thinkingModel;
+    triggerContextWindowRefresh(currentMode);
     showModeTip("已恢复默认：快速 DeepSeek，思考 Kimi");
   } catch {
     showModeTip("恢复默认失败");
@@ -1322,12 +1548,32 @@ modeSwitch?.addEventListener("click", (e) => {
   const mode = btn.dataset.mode;
   if (!mode || mode === currentMode) return;
   setMode(mode);
+  refreshContextMeter(askInput?.value || "");
   if (mode === "thinking") {
     alert("来自作者的话:\n思考模式所使用的模型由于种种原因成本较高, 快速所使用的模型也不是那么不堪。如果不是要处理特别复杂的题目, 建议还是使用快速模式哦~");
   }
 });
 
+askInput?.addEventListener("input", () => {
+  refreshContextMeter(askInput.value || "");
+});
+
+baseUrlInput?.addEventListener("input", () => {
+  if ((providerSelect?.value || "") === "custom") {
+    triggerContextWindowRefresh(currentMode);
+  }
+});
+
+fastModelInput?.addEventListener("input", () => {
+  if (currentMode === "fast") triggerContextWindowRefresh("fast");
+});
+
+thinkingModelInput?.addEventListener("input", () => {
+  if (currentMode === "thinking") triggerContextWindowRefresh("thinking");
+});
+
 setMode("fast");
+triggerContextWindowRefresh("fast");
 
 timeTip.textContent = formatTime();
 const initialSession = getCurrentSession(false);
@@ -1337,3 +1583,4 @@ if (initialSession) {
   renderHistoryList();
   initGreeting();
 }
+refreshContextMeter();
