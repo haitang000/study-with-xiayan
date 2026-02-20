@@ -79,8 +79,36 @@ function getStoredSessions() {
 }
 
 function saveSessions(sessions) {
+  const normalizedSessions = Array.isArray(sessions) ? sessions.slice(-40) : [];
   try {
-    localStorage.setItem(CHAT_SESSIONS_STORAGE, JSON.stringify(sessions.slice(-40)));
+    localStorage.setItem(CHAT_SESSIONS_STORAGE, JSON.stringify(normalizedSessions));
+    return;
+  } catch {}
+
+  // 存储空间不足时，优先删除更早会话，再逐步裁剪消息数量，尽可能保留最新记录。
+  const working = normalizedSessions.map((session) => ({
+    ...session,
+    messages: Array.isArray(session.messages) ? [...session.messages] : [],
+  }));
+
+  while (working.length) {
+    try {
+      localStorage.setItem(CHAT_SESSIONS_STORAGE, JSON.stringify(working));
+      return;
+    } catch {}
+
+    const newest = working[working.length - 1];
+    if (newest?.messages?.length > 6) {
+      newest.messages = newest.messages.slice(-6);
+      newest.updatedAt = formatTime();
+      continue;
+    }
+
+    working.shift();
+  }
+
+  try {
+    localStorage.setItem(CHAT_SESSIONS_STORAGE, "[]");
   } catch {}
 }
 
