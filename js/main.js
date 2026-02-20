@@ -656,7 +656,6 @@ explainBtn.addEventListener("click", async () => {
   const selectedModel = getConfiguredModeModel(currentMode);
   if (isLikelyTextOnlyModel(selectedModel)) {
     showMultimodalUnsupportedAlert(selectedModel);
-    return;
   }
 
   explainBtn.classList.remove("btn-pulse");
