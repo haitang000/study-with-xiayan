@@ -78,9 +78,78 @@ function getStoredSessions() {
   }
 }
 
+function trimSessionPayload(sessions, maxCharsPerMessage = 4000) {
+  return (Array.isArray(sessions) ? sessions : []).map((session) => ({
+    ...session,
+    messages: Array.isArray(session.messages)
+      ? session.messages
+          .map((msg) => ({
+            ...msg,
+            text: String(msg?.text || "").slice(-maxCharsPerMessage),
+          }))
+          .filter((msg) => msg.text)
+      : [],
+  }));
+}
+
 function saveSessions(sessions) {
+  const normalizedSessions = trimSessionPayload(
+    Array.isArray(sessions) ? sessions.slice(-40) : [],
+    4000,
+  );
   try {
-    localStorage.setItem(CHAT_SESSIONS_STORAGE, JSON.stringify(sessions.slice(-40)));
+    localStorage.setItem(CHAT_SESSIONS_STORAGE, JSON.stringify(normalizedSessions));
+    return;
+  } catch {}
+
+  // 存储空间不足时，逐步压缩最新会话内容，再移除更早会话，尽可能保留最近记录。
+  const working = normalizedSessions.map((session) => ({
+    ...session,
+    messages: Array.isArray(session.messages) ? [...session.messages] : [],
+  }));
+
+  const charLimits = [2500, 1500, 800, 400, 200];
+
+  while (working.length) {
+    try {
+      localStorage.setItem(CHAT_SESSIONS_STORAGE, JSON.stringify(working));
+      return;
+    } catch {}
+
+    const newest = working[working.length - 1];
+    if (newest?.messages?.length > 8) {
+      newest.messages = newest.messages.slice(-8);
+      newest.updatedAt = formatTime();
+      continue;
+    }
+
+    let compressed = false;
+    for (const limit of charLimits) {
+      const nextMessages = (newest?.messages || []).map((msg) => ({
+        ...msg,
+        text: String(msg?.text || "").slice(-limit),
+      }));
+      if (JSON.stringify(nextMessages) !== JSON.stringify(newest?.messages || [])) {
+        newest.messages = nextMessages;
+        newest.updatedAt = formatTime();
+        compressed = true;
+        break;
+      }
+    }
+    if (compressed) continue;
+
+    if (newest?.messages?.length > 2) {
+      newest.messages = newest.messages.slice(-2);
+      newest.updatedAt = formatTime();
+      continue;
+    }
+
+    working.shift();
+  }
+
+  try {
+    localStorage.removeItem(CHAT_SESSIONS_STORAGE);
+    localStorage.setItem(CHAT_SESSIONS_STORAGE, "[]");
   } catch {}
 }
 
@@ -154,7 +223,7 @@ function updateSession(sessionId, updater) {
 }
 
 function appendSessionMessage(role, text) {
-  const content = String(text || "").trim();
+  const content = String(text || "").trim().slice(-4000);
   if (!content) return;
   const session = getCurrentSession();
   if (!session) return;
