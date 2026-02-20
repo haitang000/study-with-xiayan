@@ -355,6 +355,31 @@ function parseApiError(data, fallback) {
   return fallback || "接口调用失败，请稍后重试。";
 }
 
+function isLikelyTextOnlyModel(modelName = "") {
+  const normalized = String(modelName).trim().toLowerCase();
+  if (!normalized) return false;
+  const knownTextOnlyModels = new Set([
+    "deepseek-reasoner",
+    "deepseek-ai/deepseek-r1",
+    "qwen/qwen2.5-7b-instruct",
+    "moonshot-v1-8k",
+    "moonshot-v1-32k",
+  ]);
+  return knownTextOnlyModels.has(normalized);
+}
+
+function isMultimodalUnsupportedError(message = "") {
+  return /(不支持.*(图像|图片|多模态)|does not support.*(image|vision|multimodal)|image_url|invalid.*image)/i.test(
+    String(message),
+  );
+}
+
+function showMultimodalUnsupportedAlert(modelName) {
+  alert(
+    `当前模型（${modelName}）不支持多模态输入，无法解析题目图片。\n请在设置里切换到支持图像的模型后再试。`,
+  );
+}
+
 function extractChunkText(data) {
   const delta = data?.choices?.[0]?.delta || {};
   if (typeof delta.content === "string") return delta.content;
@@ -628,6 +653,12 @@ explainBtn.addEventListener("click", async () => {
   }
   if (isBusy) return;
 
+  const selectedModel = getConfiguredModeModel(currentMode);
+  if (isLikelyTextOnlyModel(selectedModel)) {
+    showMultimodalUnsupportedAlert(selectedModel);
+    return;
+  }
+
   explainBtn.classList.remove("btn-pulse");
   const { article: thinkingMsg, body: msgBody } = appendMsg("正在思考...", {
     thinking: true,
@@ -691,6 +722,9 @@ explainBtn.addEventListener("click", async () => {
     updateCharacterBubble("讲解完成。你可以继续追问“为什么这么做”。");
     if (lastUsage) updateContextByUsage(lastUsage);
   } catch (error) {
+    if (isMultimodalUnsupportedError(error.message)) {
+      showMultimodalUnsupportedAlert(selectedModel);
+    }
     thinkingMsg.remove();
     appendMsg(`讲解失败：${error.message}`, { isError: true });
   } finally {
