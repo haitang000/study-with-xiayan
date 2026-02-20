@@ -75,3 +75,7 @@ npx vercel --prod --yes
 - `PROXY_GEMINI_URL`
 
 > 注意：`js/env.local.js` 已被 `.gitignore` 忽略，不会被提交到仓库。请自行创建
+
+## 特别鸣谢
+
+- [@fufu3939](https://github.com/fufu3939) - Prompt 优化
