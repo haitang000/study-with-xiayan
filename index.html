@@ -22,7 +22,7 @@
   <div class="app">
     <aside class="left">
       <div class="left-top">
-        <button class="esc" id="settingsBtn"><i class="fa-solid fa-gear"></i><br><small>设置</small></button>
+        <button class="esc" id="moreBtn" type="button"><i class="fa-solid fa-bars"></i><br><small>更多</small></button>
         <div class="status">
           <div class="status-head">◆ 模式选择</div>
           <div class="config-group">
@@ -89,6 +89,28 @@
       <div class="draft-box">
         <textarea id="draft" placeholder="夏彦回答后会自动生成笔记..."></textarea>
       </div>
+    </aside>
+  </div>
+
+  <div class="sidebar-overlay" id="sidebarOverlay" aria-hidden="true">
+    <aside class="sidebar-drawer" id="sidebarDrawer" aria-label="更多功能">
+      <div class="sidebar-head">
+        <span>更多</span>
+        <button type="button" class="sidebar-close" id="sidebarCloseBtn" aria-label="关闭侧边栏">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <button type="button" class="sidebar-action" id="openSettingsBtn">
+        <i class="fa-solid fa-gear"></i>
+        <span>设置</span>
+      </button>
+      <section class="history-section">
+        <div class="history-head">
+          <span>对话记录</span>
+          <button type="button" id="clearHistoryBtn">清空</button>
+        </div>
+        <div class="history-list" id="historyList"></div>
+      </section>
     </aside>
   </div>
 
