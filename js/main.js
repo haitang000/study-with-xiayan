@@ -568,10 +568,10 @@ function getProvider() {
 
 function getProxyModelByMode(mode) {
   if (mode === "fast") return "deepseek-chat";
-  if (mode === "thinking") return "kimi-2.5";
+  if (mode === "thinking") return "kimi-k2.5";
   const preferred = MODE_DEFAULT_MODEL[mode] || MODE_DEFAULT_MODEL.fast;
   if (preferred && MODEL_CONFIGS[preferred]) return preferred;
-  if (mode === "thinking" && MODEL_CONFIGS["kimi-2.5"]) return "kimi-2.5";
+  if (mode === "thinking" && MODEL_CONFIGS["kimi-k2.5"]) return "kimi-k2.5";
   if (MODEL_CONFIGS["kimi-latest"]) return "kimi-latest";
   return Object.keys(MODEL_CONFIGS)[0] || "";
 }
