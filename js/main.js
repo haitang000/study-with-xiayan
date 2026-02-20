@@ -19,6 +19,7 @@ const modeSwitch = document.getElementById("modeSwitch");
 const modeButtons = Array.from(document.querySelectorAll(".mode-btn"));
 const moreBtn = document.getElementById("moreBtn");
 const sidebarOverlay = document.getElementById("sidebarOverlay");
+const sidebarDrawer = document.getElementById("sidebarDrawer");
 const sidebarCloseBtn = document.getElementById("sidebarCloseBtn");
 const openSettingsBtn = document.getElementById("openSettingsBtn");
 const historyList = document.getElementById("historyList");
@@ -43,6 +44,8 @@ const CHAT_SESSIONS_STORAGE = "chat_session_records";
 const CHAT_ACTIVE_SESSION_STORAGE = "chat_active_session_id";
 let currentMode = "fast";
 let currentSessionId = "";
+const SIDEBAR_ANIM_DURATION = 220;
+let sidebarCloseTimer = null;
 
 modeToast.className = "mode-toast";
 document.body.appendChild(modeToast);
@@ -71,8 +74,7 @@ function getStoredSessions() {
               }))
               .filter((msg) => msg.text)
           : [],
-      }))
-      .filter((item) => item.messages.length);
+      }));
   } catch {
     return [];
   }
@@ -172,6 +174,16 @@ function getActiveSessionId() {
   }
 }
 
+function getSessionSortTimestamp(session) {
+  const raw = String(session?.updatedAt || session?.createdAt || "").trim();
+  if (raw) {
+    const parsed = Date.parse(raw.replace(/\//g, "-"));
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  const idMatch = String(session?.id || "").match(/^session_(\d+)_/);
+  return idMatch ? Number(idMatch[1]) : 0;
+}
+
 function createSession(initialTitle = "新的对话") {
   const sessions = getStoredSessions();
   const session = {
@@ -203,7 +215,9 @@ function getCurrentSession(createIfMissing = true) {
     }
   }
   if (sessions.length) {
-    const latest = sessions[sessions.length - 1];
+    const latest = sessions
+      .slice()
+      .sort((a, b) => getSessionSortTimestamp(b) - getSessionSortTimestamp(a))[0];
     setCurrentSessionId(latest.id);
     return latest;
   }
@@ -306,7 +320,7 @@ function renderHistoryList() {
 
   sessions
     .slice()
-    .reverse()
+    .sort((a, b) => getSessionSortTimestamp(b) - getSessionSortTimestamp(a))
     .forEach((item) => {
       const row = document.createElement("button");
       row.type = "button";
@@ -333,8 +347,71 @@ function renderHistoryList() {
 
 function setSidebarOpen(open) {
   if (!sidebarOverlay) return;
-  sidebarOverlay.classList.toggle("show", open);
-  sidebarOverlay.setAttribute("aria-hidden", open ? "false" : "true");
+  const isShown = sidebarOverlay.classList.contains("show");
+  if (open && isShown && !sidebarCloseTimer) return;
+  if (!open && !isShown) return;
+
+  if (sidebarCloseTimer) {
+    clearTimeout(sidebarCloseTimer);
+    sidebarCloseTimer = null;
+  }
+
+  const canAnimate =
+    !!sidebarDrawer &&
+    typeof sidebarOverlay.animate === "function" &&
+    typeof sidebarDrawer.animate === "function";
+
+  if (!canAnimate) {
+    sidebarOverlay.classList.toggle("show", open);
+    sidebarOverlay.setAttribute("aria-hidden", open ? "false" : "true");
+    return;
+  }
+
+  if (open) {
+    sidebarOverlay.classList.add("show");
+    sidebarOverlay.setAttribute("aria-hidden", "false");
+    sidebarOverlay.animate(
+      [{ opacity: 0 }, { opacity: 1 }],
+      {
+        duration: SIDEBAR_ANIM_DURATION,
+        easing: "ease",
+      },
+    );
+    sidebarDrawer.animate(
+      [
+        { transform: "translateX(-100px)", opacity: 0 },
+        { transform: "translateX(0)", opacity: 1 },
+      ],
+      {
+        duration: SIDEBAR_ANIM_DURATION,
+        easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+      },
+    );
+    return;
+  }
+
+  sidebarOverlay.setAttribute("aria-hidden", "true");
+  sidebarOverlay.animate(
+    [{ opacity: 1 }, { opacity: 0 }],
+    {
+      duration: SIDEBAR_ANIM_DURATION,
+      easing: "ease",
+    },
+  );
+  sidebarDrawer.animate(
+    [
+      { transform: "translateX(0)", opacity: 1 },
+      { transform: "translateX(-80px)", opacity: 0 },
+    ],
+    {
+      duration: SIDEBAR_ANIM_DURATION,
+      easing: "cubic-bezier(0.4, 0, 1, 1)",
+    },
+  );
+  sidebarCloseTimer = setTimeout(() => {
+    sidebarOverlay.classList.remove("show");
+    sidebarCloseTimer = null;
+  }, SIDEBAR_ANIM_DURATION);
 }
 
 function openSettingsPanel() {
