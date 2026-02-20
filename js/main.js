@@ -764,6 +764,9 @@ async function summarizeToDraft(question, answer) {
 }
 
 async function initGreeting() {
+  if (!getCurrentSession(false)) {
+    createSession("日常对话");
+  }
   await systemPromptReady;
   const { body: msgBody } = appendMsg("", { thinking: true });
 
@@ -803,6 +806,7 @@ async function initGreeting() {
     msgBody.classList.remove("typing-active");
     renderRichContent(msgBody, fullText);
     conversation.push({ role: "assistant", content: fullText });
+    appendSessionMessage("assistant", fullText);
   } catch (e) {
     msgBody.classList.add("error-box");
     msgBody.innerHTML =
@@ -1046,12 +1050,15 @@ openSettingsBtn?.addEventListener("click", () => {
 
 clearHistoryBtn?.addEventListener("click", () => {
   try {
-    localStorage.removeItem(CHAT_SESSIONS_STORAGE);
-    setCurrentSessionId("");
-    renderHistoryList();
-    showModeTip("对话记录已清空");
+    clearPreview();
+    explainBtn.classList.remove("btn-pulse");
+    fileInput.value = "";
+    const session = createSession("新的对话");
+    loadSession(session.id);
+    initGreeting();
+    showModeTip("已创建新对话");
   } catch {
-    showModeTip("清空失败");
+    showModeTip("创建失败");
   }
 });
 
