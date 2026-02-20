@@ -870,10 +870,26 @@ body {
 }
 
 .history-item {
+  width: 100%;
+  text-align: left;
   border: 1px solid #ebcb83;
   border-radius: 10px;
   background: #fff9e8;
   padding: 8px 10px;
+  cursor: pointer;
+}
+
+.history-item.active {
+  border-color: #e8ad4b;
+  box-shadow: inset 0 0 0 1px rgba(232, 173, 75, 0.35);
+  background: #fff4dc;
+}
+
+.history-title {
+  font-size: 14px;
+  color: #5c4523;
+  font-weight: 700;
+  margin-bottom: 4px;
 }
 
 .history-meta {
