@@ -17,7 +17,12 @@ const characterBubble = document.getElementById("characterBubble");
 const askSubmitBtn = askForm.querySelector('button[type="submit"]');
 const modeSwitch = document.getElementById("modeSwitch");
 const modeButtons = Array.from(document.querySelectorAll(".mode-btn"));
-const settingsBtn = document.getElementById("settingsBtn");
+const moreBtn = document.getElementById("moreBtn");
+const sidebarOverlay = document.getElementById("sidebarOverlay");
+const sidebarCloseBtn = document.getElementById("sidebarCloseBtn");
+const openSettingsBtn = document.getElementById("openSettingsBtn");
+const historyList = document.getElementById("historyList");
+const clearHistoryBtn = document.getElementById("clearHistoryBtn");
 const settingsModal = document.getElementById("settingsModal");
 const apiKeyInput = document.getElementById("apiKeyInput");
 const saveApiKeyBtn = document.getElementById("saveApiKeyBtn");
@@ -34,10 +39,248 @@ const PROVIDER_STORAGE = "llm_provider";
 const BASE_URL_STORAGE = "llm_base_url";
 const FAST_MODEL_STORAGE = "fast_mode_model";
 const THINKING_MODEL_STORAGE = "thinking_mode_model";
+const CHAT_SESSIONS_STORAGE = "chat_session_records";
+const CHAT_ACTIVE_SESSION_STORAGE = "chat_active_session_id";
 let currentMode = "fast";
+let currentSessionId = "";
 
 modeToast.className = "mode-toast";
 document.body.appendChild(modeToast);
+
+function buildSessionId() {
+  return `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getStoredSessions() {
+  try {
+    const records = JSON.parse(localStorage.getItem(CHAT_SESSIONS_STORAGE) || "[]");
+    if (!Array.isArray(records)) return [];
+    return records
+      .map((item) => ({
+        id: item?.id || buildSessionId(),
+        title: (item?.title || "新的对话").trim() || "新的对话",
+        createdAt: item?.createdAt || formatTime(),
+        updatedAt: item?.updatedAt || item?.createdAt || formatTime(),
+        messages: Array.isArray(item?.messages)
+          ? item.messages
+              .filter((msg) => msg && (msg.role === "user" || msg.role === "assistant"))
+              .map((msg) => ({
+                role: msg.role,
+                text: String(msg.text || "").trim(),
+                time: msg.time || formatTime(),
+              }))
+              .filter((msg) => msg.text)
+          : [],
+      }))
+      .filter((item) => item.messages.length);
+  } catch {
+    return [];
+  }
+}
+
+function saveSessions(sessions) {
+  try {
+    localStorage.setItem(CHAT_SESSIONS_STORAGE, JSON.stringify(sessions.slice(-40)));
+  } catch {}
+}
+
+function setCurrentSessionId(sessionId) {
+  currentSessionId = sessionId || "";
+  try {
+    if (currentSessionId) {
+      localStorage.setItem(CHAT_ACTIVE_SESSION_STORAGE, currentSessionId);
+    } else {
+      localStorage.removeItem(CHAT_ACTIVE_SESSION_STORAGE);
+    }
+  } catch {}
+}
+
+function getActiveSessionId() {
+  try {
+    return localStorage.getItem(CHAT_ACTIVE_SESSION_STORAGE) || "";
+  } catch {
+    return "";
+  }
+}
+
+function createSession(initialTitle = "新的对话") {
+  const sessions = getStoredSessions();
+  const session = {
+    id: buildSessionId(),
+    title: initialTitle,
+    createdAt: formatTime(),
+    updatedAt: formatTime(),
+    messages: [],
+  };
+  sessions.push(session);
+  saveSessions(sessions);
+  setCurrentSessionId(session.id);
+  renderHistoryList();
+  return session;
+}
+
+function getCurrentSession(createIfMissing = true) {
+  const sessions = getStoredSessions();
+  if (currentSessionId) {
+    const existing = sessions.find((item) => item.id === currentSessionId);
+    if (existing) return existing;
+  }
+  const activeId = getActiveSessionId();
+  if (activeId) {
+    const activeSession = sessions.find((item) => item.id === activeId);
+    if (activeSession) {
+      setCurrentSessionId(activeSession.id);
+      return activeSession;
+    }
+  }
+  if (sessions.length) {
+    const latest = sessions[sessions.length - 1];
+    setCurrentSessionId(latest.id);
+    return latest;
+  }
+  if (!createIfMissing) return null;
+  return createSession();
+}
+
+function updateSession(sessionId, updater) {
+  const sessions = getStoredSessions();
+  const idx = sessions.findIndex((item) => item.id === sessionId);
+  if (idx === -1) return null;
+  const next = updater({ ...sessions[idx] });
+  if (!next) return null;
+  sessions[idx] = next;
+  saveSessions(sessions);
+  return next;
+}
+
+function appendSessionMessage(role, text) {
+  const content = String(text || "").trim();
+  if (!content) return;
+  const session = getCurrentSession();
+  if (!session) return;
+  updateSession(session.id, (item) => {
+    item.messages = item.messages || [];
+    item.messages.push({ role, text: content, time: formatTime() });
+    item.updatedAt = formatTime();
+    return item;
+  });
+  renderHistoryList();
+}
+
+async function summarizeSessionTitle(sessionId) {
+  const session = getStoredSessions().find((item) => item.id === sessionId);
+  if (!session || session.messages.length < 2) return;
+  if (session.title && session.title !== "新的对话") return;
+
+  const sample = session.messages
+    .slice(0, 6)
+    .map((item) => `${item.role === "user" ? "用户" : "AI"}：${item.text}`)
+    .join("\n");
+
+  let title = "";
+  try {
+    const stream = callModelStream(
+      [
+        {
+          role: "system",
+          content:
+            "请把对话总结成一个简短标题，只输出标题本身，不超过18个中文字符，不要标点和引号。",
+        },
+        { role: "user", content: sample },
+      ],
+      getConfiguredModeModel("fast"),
+      { modeOverride: "fast" },
+    );
+    for await (const chunk of stream) {
+      if (chunk.content) title += chunk.content;
+    }
+  } catch {}
+
+  title = title.replace(/[\n\r"'“”‘’]/g, "").trim();
+  if (!title) {
+    const firstUser = session.messages.find((item) => item.role === "user")?.text || "新的对话";
+    title = firstUser.slice(0, 18);
+  }
+  const finalTitle = title.slice(0, 18) || "新的对话";
+  updateSession(sessionId, (item) => {
+    item.title = finalTitle;
+    return item;
+  });
+  renderHistoryList();
+}
+
+function loadSession(sessionId) {
+  const session = getStoredSessions().find((item) => item.id === sessionId);
+  if (!session) return;
+  setCurrentSessionId(session.id);
+  chatFeed.innerHTML = "";
+  conversation.length = 0;
+  session.messages.forEach((item) => {
+    appendMsg(item.text, { role: item.role });
+    conversation.push({ role: item.role, content: item.text });
+  });
+  renderHistoryList();
+  setSidebarOpen(false);
+}
+
+function renderHistoryList() {
+  if (!historyList) return;
+  const sessions = getStoredSessions();
+  historyList.innerHTML = "";
+  if (!sessions.length) {
+    const empty = document.createElement("div");
+    empty.className = "history-empty";
+    empty.textContent = "还没有记录，开始一段新对话吧。";
+    historyList.appendChild(empty);
+    return;
+  }
+
+  sessions
+    .slice()
+    .reverse()
+    .forEach((item) => {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "history-item";
+      if (item.id === currentSessionId) row.classList.add("active");
+
+      const meta = document.createElement("div");
+      meta.className = "history-meta";
+      meta.textContent = `${item.updatedAt || item.createdAt} · ${item.messages.length} 条`;
+
+      const title = document.createElement("div");
+      title.className = "history-title";
+      title.textContent = item.title || "新的对话";
+
+      const preview = document.createElement("div");
+      preview.className = "history-text";
+      preview.textContent = item.messages[item.messages.length - 1]?.text || "";
+
+      row.append(meta, title, preview);
+      row.addEventListener("click", () => loadSession(item.id));
+      historyList.appendChild(row);
+    });
+}
+
+function setSidebarOpen(open) {
+  if (!sidebarOverlay) return;
+  sidebarOverlay.classList.toggle("show", open);
+  sidebarOverlay.setAttribute("aria-hidden", open ? "false" : "true");
+}
+
+function openSettingsPanel() {
+  const provider = getProvider();
+  apiKeyInput.value = getUserApiKey();
+  if (providerSelect) providerSelect.value = provider;
+  if (baseUrlInput)
+    baseUrlInput.value =
+      provider === "custom" ? getProviderBaseUrl("custom") : "";
+  if (fastModelInput) fastModelInput.value = getConfiguredModeModel("fast");
+  if (thinkingModelInput)
+    thinkingModelInput.value = getConfiguredModeModel("thinking");
+  setSettingsModalOpen(true);
+  setTimeout(() => apiKeyInput?.focus(), 50);
+}
 
 marked.use({
   breaks: true,
@@ -285,7 +528,11 @@ function renderRichContent(element, text) {
 }
 
 function appendMsg(text, options = {}) {
-  const { role = "assistant", thinking = false, isError = false } = options;
+  const {
+    role = "assistant",
+    thinking = false,
+    isError = false,
+  } = options;
   const article = document.createElement("article");
   article.className = "msg";
   const avatar = document.createElement("div");
@@ -595,6 +842,7 @@ fileInput.addEventListener("change", async (e) => {
 
   uploaded = file;
   conversation.length = 0;
+  createSession("图片题目讲解");
 
   if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
   previewObjectUrl = URL.createObjectURL(file);
@@ -629,6 +877,7 @@ explainBtn.addEventListener("click", async () => {
   if (isBusy) return;
 
   explainBtn.classList.remove("btn-pulse");
+  appendSessionMessage("user", "请讲解我上传的题目图片");
   const { article: thinkingMsg, body: msgBody } = appendMsg("正在思考...", {
     thinking: true,
   });
@@ -682,6 +931,8 @@ explainBtn.addEventListener("click", async () => {
 
     msgBody.classList.remove("typing-active");
     renderRichContent(msgBody, fullText);
+    appendSessionMessage("assistant", fullText);
+    summarizeSessionTitle(currentSessionId);
     conversation.push({
       role: "user",
       content: "我上传了一道题目图片，请你完整讲解。",
@@ -712,6 +963,7 @@ askForm.addEventListener("submit", async (e) => {
   if (isBusy) return;
 
   appendMsg(q, { role: "user" });
+  appendSessionMessage("user", q);
   askInput.value = "";
   setBusy(true);
 
@@ -765,6 +1017,8 @@ askForm.addEventListener("submit", async (e) => {
 
     msgBody.classList.remove("typing-active");
     renderRichContent(msgBody, fullText);
+    appendSessionMessage("assistant", fullText);
+    summarizeSessionTitle(currentSessionId);
     conversation.push({ role: "user", content: q });
     conversation.push({ role: "assistant", content: fullText });
     await summarizeToDraft(q, fullText);
@@ -777,18 +1031,28 @@ askForm.addEventListener("submit", async (e) => {
   }
 });
 
-settingsBtn?.addEventListener("click", () => {
-  const provider = getProvider();
-  apiKeyInput.value = getUserApiKey();
-  if (providerSelect) providerSelect.value = provider;
-  if (baseUrlInput)
-    baseUrlInput.value =
-      provider === "custom" ? getProviderBaseUrl("custom") : "";
-  if (fastModelInput) fastModelInput.value = getConfiguredModeModel("fast");
-  if (thinkingModelInput)
-    thinkingModelInput.value = getConfiguredModeModel("thinking");
-  setSettingsModalOpen(true);
-  setTimeout(() => apiKeyInput?.focus(), 50);
+moreBtn?.addEventListener("click", () => setSidebarOpen(true));
+
+sidebarCloseBtn?.addEventListener("click", () => setSidebarOpen(false));
+
+sidebarOverlay?.addEventListener("click", (e) => {
+  if (e.target === sidebarOverlay) setSidebarOpen(false);
+});
+
+openSettingsBtn?.addEventListener("click", () => {
+  setSidebarOpen(false);
+  openSettingsPanel();
+});
+
+clearHistoryBtn?.addEventListener("click", () => {
+  try {
+    localStorage.removeItem(CHAT_SESSIONS_STORAGE);
+    setCurrentSessionId("");
+    renderHistoryList();
+    showModeTip("对话记录已清空");
+  } catch {
+    showModeTip("清空失败");
+  }
 });
 
 closeSettingsBtn?.addEventListener("click", () => setSettingsModalOpen(false));
@@ -889,7 +1153,12 @@ resetDefaultModelsBtn?.addEventListener("click", () => {
 exportMdBtn?.addEventListener("click", exportDraftAsMarkdown);
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && settingsModal?.classList.contains("show")) {
+  if (e.key !== "Escape") return;
+  if (sidebarOverlay?.classList.contains("show")) {
+    setSidebarOpen(false);
+    return;
+  }
+  if (settingsModal?.classList.contains("show")) {
     setSettingsModalOpen(false);
   }
 });
@@ -908,4 +1177,10 @@ modeSwitch?.addEventListener("click", (e) => {
 setMode("fast");
 
 timeTip.textContent = formatTime();
-initGreeting();
+const initialSession = getCurrentSession(false);
+if (initialSession) {
+  loadSession(initialSession.id);
+} else {
+  renderHistoryList();
+  initGreeting();
+}
