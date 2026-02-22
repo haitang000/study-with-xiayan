@@ -1158,14 +1158,21 @@ async function* callModelStream(
   const config = MODEL_CONFIGS[configKey] || MODEL_CONFIGS[proxyFallbackKey];
   if (isProxy && !config)
     throw new Error("内置代理模型配置缺失，请在设置中切换为可用模型");
-  if (isProxy && !config?.url)
-    throw new Error("内置代理地址未配置，请通过环境变量注入 PROXY_*_URL");
+
+  const requestUrl = isProxy ? config.url : getProviderBaseUrl(provider);
+
+  if (!requestUrl) {
+    if (provider.startsWith("native_")) {
+      const envVarName = `PROXY_${provider.split('_')[1].toUpperCase()}_URL`;
+      throw new Error(`内置代理地址未配置，请联系站长在环境变量中注入 ${envVarName}`);
+    }
+    throw new Error("请在设置中填写有效的 API Base URL");
+  }
   const modelName = isProxy
     ? config.model
     : getConfiguredModeModel(targetMode);
   // 传入 provider 以便优先从 env.local.js 读取对应 API Key
   const userApiKey = getUserApiKey(provider);
-  const requestUrl = isProxy ? config.url : getProviderBaseUrl(provider);
   const payload = {
     model: modelName,
     messages,
@@ -1175,7 +1182,6 @@ async function* callModelStream(
   const headers = { "Content-Type": "application/json" };
   if (requiresApiKey && userApiKey) headers.Authorization = `Bearer ${userApiKey}`;
 
-  if (!requestUrl) throw new Error("请在设置中填写有效的 API Base URL");
   if (requiresApiKey && !userApiKey)
     throw new Error("请先在设置中填写 API Key（或在 env.local.js 中配置对应的 API Key）");
 
