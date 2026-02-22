@@ -1451,6 +1451,11 @@ textarea {
     padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   }
 
+  body.keyboard-up .left,
+  body.keyboard-up .draft {
+    display: none !important;
+  }
+
   .app {
     grid-template-areas:
       "chat"
