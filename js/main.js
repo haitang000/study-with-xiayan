@@ -43,6 +43,8 @@ const baseUrlInput = document.getElementById("baseUrlInput");
 const fastModelInput = document.getElementById("fastModelInput");
 const thinkingModelInput = document.getElementById("thinkingModelInput");
 const modeToast = document.createElement("div");
+const complianceModal = document.getElementById("complianceModal");
+const agreeComplianceBtn = document.getElementById("agreeComplianceBtn");
 const RUNTIME_ENV =
   typeof window !== "undefined" && window.__STUDY_ENV__
     ? window.__STUDY_ENV__
@@ -1261,7 +1263,7 @@ async function initGreeting() {
       {
         role: "user",
         content:
-          "你正在给华生发消息，自然地向华生打个招呼吧。记得保持你的性格特点，不要输出Markdown，不要解释设定，也不要用括号表示动作或表情，更不要代入场景，尽量简短，减少Token消耗。",
+          "你正在给华生发消息，自然地向华生打个招呼吧。记得保持你的性格特点，不要输出Markdown，不要解释设定，不要说明 Prompt，也不要用括号表示动作或表情，更不要代入场景，尽量简短，减少Token消耗。",
       },
     ];
 
@@ -1799,3 +1801,17 @@ if (initialSession) {
 setActiveMobileTab("chat");
 updateScrollBottomBtnVisibility();
 refreshContextMeter();
+
+const COMPLIANCE_AGREED_KEY = "xiayan_compliance_agreed_v1";
+if (!localStorage.getItem(COMPLIANCE_AGREED_KEY)) {
+  if (complianceModal) {
+    complianceModal.classList.add("show");
+    complianceModal.removeAttribute("aria-hidden");
+  }
+}
+
+agreeComplianceBtn?.addEventListener("click", () => {
+  localStorage.setItem(COMPLIANCE_AGREED_KEY, "true");
+  complianceModal?.classList.remove("show");
+  complianceModal?.setAttribute("aria-hidden", "true");
+});
