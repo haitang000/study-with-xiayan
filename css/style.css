@@ -1428,6 +1428,10 @@ textarea {
     padding-left: calc(12px + env(safe-area-inset-left, 0px));
   }
 
+  body.keyboard-up {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+
   .app {
     grid-template-areas:
       "chat"
@@ -1500,6 +1504,11 @@ textarea {
     padding-bottom: 74px;
     scroll-padding-bottom: 82px;
   }
+  
+  body.keyboard-up .chat-feed {
+    padding-bottom: 20px;
+    scroll-padding-bottom: 20px;
+  }
 
   .msg-body {
     font-size: 16px;
@@ -1556,6 +1565,11 @@ textarea {
     width: 40px;
     height: 40px;
     z-index: 8;
+  }
+
+  body.is-mobile.keyboard-up .mobile-tabbar,
+  body.is-mobile.keyboard-up .scroll-bottom-btn {
+    display: none !important;
   }
 }
 

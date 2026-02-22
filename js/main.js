@@ -1505,8 +1505,11 @@ askForm.addEventListener("submit", async (e) => {
   appendMsg(q, { role: "user" });
   appendSessionMessage("user", q);
   askInput.value = "";
+  askInput.style.height = "auto";
   refreshContextMeter();
   setBusy(true);
+  setActiveMobileTab("chat");
+  scrollToTabSection("chat");
 
   let thinkingMsg = null;
   let msgBody = null;
@@ -1755,6 +1758,17 @@ askInput?.addEventListener("input", () => {
   refreshContextMeter(askInput.value || "");
   askInput.style.height = "auto";
   askInput.style.height = `${Math.min(140, askInput.scrollHeight)}px`;
+});
+
+askInput?.addEventListener("focus", () => {
+  document.body.classList.add("keyboard-up");
+});
+
+askInput?.addEventListener("blur", () => {
+  // 延迟移除，避免点发送按钮瞬间键盘收起导致的抖动
+  setTimeout(() => {
+    document.body.classList.remove("keyboard-up");
+  }, 100);
 });
 
 baseUrlInput?.addEventListener("input", () => {
