@@ -1,0 +1,5 @@
+{
+    "buildCommand": "node scripts/build-env.js",
+    "outputDirectory": ".",
+    "framework": null
+}
