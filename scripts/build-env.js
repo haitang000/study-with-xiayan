@@ -7,9 +7,11 @@ const keys = [
     "PROXY_DEEPSEEK_URL",
     "PROXY_KIMI_URL",
     "PROXY_GEMINI_URL",
+    "PROXY_CLAUDE_URL",
     "DEEPSEEK_API_KEY",
     "KIMI_API_KEY",
     "GEMINI_API_KEY",
+    "CLAUDE_API_KEY",
 ];
 
 const entries = keys

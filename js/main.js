@@ -61,6 +61,7 @@ const PROXY_ENDPOINTS = {
   deepseek: readRuntimeEnv("PROXY_DEEPSEEK_URL"),
   kimi: readRuntimeEnv("PROXY_KIMI_URL"),
   gemini: readRuntimeEnv("PROXY_GEMINI_URL"),
+  claude: readRuntimeEnv("PROXY_CLAUDE_URL"),
 };
 
 const USER_API_KEY_STORAGE = "moonshot_api_key";
@@ -861,6 +862,7 @@ function getUserApiKey(provider) {
     native_deepseek: "DEEPSEEK_API_KEY",
     deepseek: "DEEPSEEK_API_KEY",
     native_gemini: "GEMINI_API_KEY",
+    native_claude: "CLAUDE_API_KEY",
     moonshot: "KIMI_API_KEY",
   };
   const envKey = provider && envKeyMap[provider];
@@ -887,6 +889,9 @@ function getConfiguredModeModel(mode) {
       return MODEL_CONFIGS[val] ? val : defaultModel;
     if (provider === "native_gemini") {
       return /^gemini/i.test(val) ? val : defaultModel;
+    }
+    if (provider === "native_claude") {
+      return /^claude/i.test(val) ? val : defaultModel;
     }
     if (provider === "native_deepseek" || provider === "deepseek") {
       return /^deepseek/i.test(val) ? val : defaultModel;
@@ -930,6 +935,7 @@ function getDefaultModelForProvider(provider, mode) {
     return getProxyModelByMode(mode);
   const defaults = {
     native_gemini: { fast: "gemini-3-flash-preview-nothinking", thinking: "gemini-3.1-pro-preview" },
+    native_claude: { fast: "claude-3-haiku-20240307", thinking: "claude-3-5-sonnet-20240620" },
     native_deepseek: { fast: "deepseek-chat", thinking: "deepseek-reasoner" },
     moonshot: { fast: "moonshot-v1-8k", thinking: "moonshot-v1-32k" },
     openai: { fast: "gpt-4o-mini", thinking: "gpt-4.1" },
@@ -944,6 +950,7 @@ function getDefaultModelForProvider(provider, mode) {
 function getProviderBaseUrl(provider) {
   const map = {
     native_gemini: PROXY_ENDPOINTS.gemini,
+    native_claude: PROXY_ENDPOINTS.claude,
     native_deepseek: PROXY_ENDPOINTS.deepseek,
     moonshot: "https://api.moonshot.cn/v1/chat/completions",
     openai: "https://api.openai.com/v1/chat/completions",
@@ -1650,6 +1657,12 @@ providerSelect?.addEventListener("change", () => {
   if (provider === "native_gemini") {
     if (fastModelInput) fastModelInput.value = "gemini-3-flash-preview-nothinking";
     if (thinkingModelInput) thinkingModelInput.value = "gemini-3.1-pro-preview";
+    triggerContextWindowRefresh(currentMode);
+    return;
+  }
+  if (provider === "native_claude") {
+    if (fastModelInput) fastModelInput.value = "claude-sonnet-4-6";
+    if (thinkingModelInput) thinkingModelInput.value = "claude-opus-4-6-thinking";
     triggerContextWindowRefresh(currentMode);
     return;
   }
