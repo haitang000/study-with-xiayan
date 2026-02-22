@@ -1255,6 +1255,67 @@ body {
   font-family: "Trebuchet MS", "Microsoft YaHei", sans-serif;
 }
 
+.avatar-upload-row {
+  display: flex;
+  gap: 8px;
+}
+
+.avatar-field {
+  margin-top: 2px;
+}
+
+.avatar-setting-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-avatar-preview {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  border: 2px solid #efcc6f;
+  object-fit: cover;
+  background: #fff6de;
+  box-shadow: 0 3px 8px rgba(168, 122, 46, 0.15);
+  flex-shrink: 0;
+}
+
+.avatar-setting-meta {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.avatar-setting-tip {
+  font-size: 14px;
+  color: #7c6746;
+  line-height: 1.4;
+  font-family: "Trebuchet MS", "Microsoft YaHei", sans-serif;
+}
+
+.avatar-action-btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid #e8c16c;
+  background: linear-gradient(120deg, #f8bf6a, #f19a43);
+  color: #fff;
+  font-size: 12px;
+  font-family: "Trebuchet MS", "Microsoft YaHei", sans-serif;
+  cursor: pointer;
+}
+
+.avatar-action-btn i {
+  margin-right: 4px;
+}
+
+.avatar-action-btn.ghost {
+  background: #fff4d7;
+  color: #9f742e;
+  border: 1px solid #ebcb83;
+}
+
 .settings-card select {
   width: 100%;
   height: 44px;

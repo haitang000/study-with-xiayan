@@ -44,6 +44,12 @@ const providerSelect = document.getElementById("providerSelect");
 const baseUrlInput = document.getElementById("baseUrlInput");
 const fastModelInput = document.getElementById("fastModelInput");
 const thinkingModelInput = document.getElementById("thinkingModelInput");
+const nicknameInput = document.getElementById("nicknameInput");
+const avatarUrlInput = document.getElementById("avatarUrlInput");
+const settingsAvatarPreview = document.getElementById("settingsAvatarPreview");
+const uploadAvatarBtn = document.getElementById("uploadAvatarBtn");
+const clearAvatarBtn = document.getElementById("clearAvatarBtn");
+const avatarFileInput = document.getElementById("avatarFileInput");
 const modeToast = document.createElement("div");
 const complianceModal = document.getElementById("complianceModal");
 const agreeComplianceBtn = document.getElementById("agreeComplianceBtn");
@@ -71,6 +77,8 @@ const PROVIDER_STORAGE = "llm_provider";
 const BASE_URL_STORAGE = "llm_base_url";
 const FAST_MODEL_STORAGE = "fast_mode_model";
 const THINKING_MODEL_STORAGE = "thinking_mode_model";
+const USER_NICKNAME_STORAGE = "chat_user_nickname";
+const USER_AVATAR_STORAGE = "chat_user_avatar";
 const MODEL_CONTEXT_CACHE_STORAGE = "model_context_window_cache";
 const CHAT_SESSIONS_STORAGE = "chat_session_records";
 const CHAT_ACTIVE_SESSION_STORAGE = "chat_active_session_id";
@@ -716,6 +724,10 @@ function openSettingsPanel() {
   if (fastModelInput) fastModelInput.value = getConfiguredModeModel("fast");
   if (thinkingModelInput)
     thinkingModelInput.value = getConfiguredModeModel("thinking");
+  if (nicknameInput) nicknameInput.value = getUserNickname();
+  const avatarUrl = getUserAvatar();
+  if (avatarUrlInput) avatarUrlInput.value = avatarUrl;
+  renderSettingsAvatarPreview(avatarUrl);
   setSettingsModalOpen(true);
   setTimeout(() => apiKeyInput?.focus(), 50);
 }
@@ -975,6 +987,64 @@ function setSettingsModalOpen(open) {
   settingsModal.setAttribute("aria-hidden", open ? "false" : "true");
 }
 
+function getUserNickname() {
+  try {
+    return localStorage.getItem(USER_NICKNAME_STORAGE)?.trim() || "你";
+  } catch {
+    return "你";
+  }
+}
+
+function getGreetingTargetName() {
+  const nickname = getUserNickname();
+  if (!nickname || nickname === "你") return "华生";
+  return nickname;
+}
+
+function getUserAvatar() {
+  try {
+    return localStorage.getItem(USER_AVATAR_STORAGE)?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
+function renderSettingsAvatarPreview(avatarUrl = getUserAvatar()) {
+  const nextUrl = String(avatarUrl || "").trim();
+  if (settingsAvatarPreview) {
+    settingsAvatarPreview.src = nextUrl || "assets/img/user_avatar.png";
+  }
+  if (clearAvatarBtn) clearAvatarBtn.hidden = !nextUrl;
+}
+
+function applyUserIdentityToAvatar(avatarEl, role) {
+  if (!avatarEl || role !== "user") return;
+  const nickname = getUserNickname();
+  const avatarUrl = getUserAvatar();
+  avatarEl.title = nickname;
+  if (avatarUrl) {
+    avatarEl.style.backgroundImage = `url("${avatarUrl}")`;
+    avatarEl.style.backgroundSize = "cover";
+    avatarEl.style.backgroundPosition = "center";
+    avatarEl.textContent = "";
+    avatarEl.style.fontSize = "0";
+    return;
+  }
+
+  avatarEl.style.backgroundImage = "none";
+  avatarEl.style.background = "linear-gradient(160deg, #b2cdf7, #7fa8ed)";
+  avatarEl.style.color = "#fff";
+  avatarEl.style.fontSize = "15px";
+  avatarEl.style.fontWeight = "700";
+  avatarEl.textContent = nickname.slice(0, 1) || "你";
+}
+
+function refreshUserAvatarsInFeed() {
+  chatFeed
+    ?.querySelectorAll(".msg.user-msg .msg-avatar")
+    .forEach((avatarEl) => applyUserIdentityToAvatar(avatarEl, "user"));
+}
+
 let toastTimer = null;
 function showModeTip(text) {
   modeToast.textContent = text;
@@ -1057,6 +1127,7 @@ function appendMsg(text, options = {}) {
   if (isUser) article.classList.add("user-msg");
   avatar.className = `msg-avatar ${isUser ? "user" : "ai"}`;
   avatar.textContent = isUser ? "你" : "";
+  applyUserIdentityToAvatar(avatar, role);
   const body = document.createElement("div");
   body.className = "msg-body";
   if (isError) body.classList.add("error-box");
@@ -1308,6 +1379,7 @@ async function initGreeting() {
     createSession("日常对话");
   }
   await systemPromptReady;
+  const userNickname = getGreetingTargetName();
   const { body: msgBody } = appendMsg("", { thinking: true });
 
   try {
@@ -1316,7 +1388,7 @@ async function initGreeting() {
       {
         role: "user",
         content:
-          "你正在给华生发消息，自然地向华生打个招呼吧。记得保持你的性格特点，不要输出Markdown，不要解释设定，不要说明 Prompt，也不要用括号表示动作或表情，更不要代入场景，尽量简短，减少Token消耗。",
+          `你正在给华生发消息，华生昵称是“${userNickname}”。请自然地向 TA 打个招呼，并优先使用这个昵称称呼。记得保持你的性格特点，不要输出Markdown，不要解释设定，不要说明 Prompt，也不要用括号表示动作或表情，更不要代入场景，尽量简短，减少Token消耗。`,
       },
     ];
 
@@ -1740,6 +1812,16 @@ saveApiKeyBtn?.addEventListener("click", () => {
     }
     setConfiguredModeModel("fast", fastModel);
     setConfiguredModeModel("thinking", thinkingModel);
+    const nickname = (nicknameInput?.value || "").trim() || "你";
+    const avatarUrl = (avatarUrlInput?.value || "").trim();
+    localStorage.setItem(USER_NICKNAME_STORAGE, nickname);
+    if (avatarUrl) {
+      localStorage.setItem(USER_AVATAR_STORAGE, avatarUrl);
+    } else {
+      localStorage.removeItem(USER_AVATAR_STORAGE);
+    }
+    renderSettingsAvatarPreview(avatarUrl);
+    refreshUserAvatarsInFeed();
     triggerContextWindowRefresh(currentMode);
     showModeTip("设置已保存");
     setSettingsModalOpen(false);
@@ -1756,11 +1838,17 @@ clearApiKeyBtn?.addEventListener("click", () => {
     localStorage.removeItem(BASE_URL_STORAGE);
     localStorage.removeItem(FAST_MODEL_STORAGE);
     localStorage.removeItem(THINKING_MODEL_STORAGE);
+    localStorage.removeItem(USER_NICKNAME_STORAGE);
+    localStorage.removeItem(USER_AVATAR_STORAGE);
     apiKeyInput.value = "";
     if (providerSelect) providerSelect.value = "native_gemini";
     if (baseUrlInput) baseUrlInput.value = "";
     if (fastModelInput) fastModelInput.value = getDefaultModelForProvider("native_gemini", "fast");
     if (thinkingModelInput) thinkingModelInput.value = getDefaultModelForProvider("native_gemini", "thinking");
+    if (nicknameInput) nicknameInput.value = "你";
+    if (avatarUrlInput) avatarUrlInput.value = "";
+    renderSettingsAvatarPreview("");
+    refreshUserAvatarsInFeed();
     triggerContextWindowRefresh(currentMode);
     showModeTip("已清除并恢复默认模型");
   } catch (e) {
@@ -1788,6 +1876,39 @@ resetDefaultModelsBtn?.addEventListener("click", () => {
     console.error("[resetDefaultModelsBtn] 恢复默认失败", e);
     showModeTip("恢复默认失败");
   }
+});
+
+uploadAvatarBtn?.addEventListener("click", () => avatarFileInput?.click());
+
+avatarFileInput?.addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith("image/")) {
+    showModeTip("请选择图片文件");
+    avatarFileInput.value = "";
+    return;
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    showModeTip("头像请控制在 2MB 以内");
+    avatarFileInput.value = "";
+    return;
+  }
+  try {
+    const dataUrl = await fileToDataUrl(file);
+    if (avatarUrlInput) avatarUrlInput.value = dataUrl;
+    renderSettingsAvatarPreview(dataUrl);
+    showModeTip("头像已就绪，记得点击保存");
+  } catch {
+    showModeTip("头像读取失败");
+  } finally {
+    avatarFileInput.value = "";
+  }
+});
+
+clearAvatarBtn?.addEventListener("click", () => {
+  if (avatarUrlInput) avatarUrlInput.value = "";
+  renderSettingsAvatarPreview("");
+  showModeTip("头像已清空，记得点击保存");
 });
 
 exportMdBtn?.addEventListener("click", exportDraftAsMarkdown);

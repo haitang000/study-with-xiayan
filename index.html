@@ -214,6 +214,27 @@
           <input id="thinkingModelInput" type="text" placeholder="例如：gpt-4.1 / deepseek-reasoner" autocomplete="on" />
         </div>
       </div>
+      <div class="settings-fields">
+        <div class="settings-field">
+          <label for="nicknameInput">你的昵称</label>
+          <input id="nicknameInput" type="text" placeholder="例如：小夏" autocomplete="on" />
+        </div>
+        <div class="settings-field avatar-field">
+          <label for="uploadAvatarBtn">头像</label>
+          <div class="avatar-setting-row">
+            <img id="settingsAvatarPreview" class="settings-avatar-preview" src="assets/img/user_avatar.png" alt="当前头像" />
+            <div class="avatar-setting-meta">
+              <div class="avatar-setting-tip">设置你当前的头像</div>
+              <div class="avatar-upload-row">
+                <button type="button" id="uploadAvatarBtn" class="avatar-action-btn"><i class="fa-solid fa-upload"></i> 上传图片</button>
+                <button type="button" id="clearAvatarBtn" class="avatar-action-btn ghost" hidden>清空头像</button>
+              </div>
+            </div>
+          </div>
+          <input id="avatarUrlInput" type="text" autocomplete="off" hidden />
+          <input id="avatarFileInput" type="file" accept="image/*" hidden />
+        </div>
+      </div>
       <div class="settings-actions">
         <button type="button" id="saveApiKeyBtn">保存</button>
         <button type="button" id="resetDefaultModelsBtn" class="ghost">默认</button>
