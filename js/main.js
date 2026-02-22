@@ -1420,7 +1420,8 @@ async function initGreeting() {
     conversation.push({ role: "assistant", content: fullText });
     appendSessionMessage("assistant", fullText);
   } catch (e) {
-    console.error("[initGreeting] 初始化问候失败", e);
+    console.error("[initGreeting] 初始化问候失败", e)
+    showModeTip("初始化失败");
     msgBody.classList.add("error-box");
     msgBody.innerHTML =
       "嘿，华生，你来啦！刚才信号好像有点不稳定……（初始化失败）";
@@ -1478,11 +1479,11 @@ async function handleImageFileSelection(file, options = {}) {
   if (!file) return;
 
   if (!file.type.startsWith("image/")) {
-    appendMsg("只支持图片文件，请重新选择。", { isError: true });
+    showModeTip("只支持图片文件，请重新选择。", { isError: true });
     return;
   }
   if (file.size > 8 * 1024 * 1024) {
-    appendMsg("图片请控制在 8MB 以内，避免上传失败。", { isError: true });
+    showModeTip("图片请控制在 8MB 以内，避免上传失败。", { isError: true });
     return;
   }
 
@@ -1506,8 +1507,8 @@ async function handleImageFileSelection(file, options = {}) {
 
   timeTip.textContent = formatTime();
   const sourceText = fromCamera ? "拍照" : "上传";
-  updateCharacterBubble(`已收到${sourceText}题目《${file.name}》，点“讲解”开始。`);
-  appendMsg(`收到你的题目：${file.name}。你可以点“讲解”，我会给你完整思路。`);
+  showModeTip(`已收到${sourceText}题目《${file.name}》，点“讲解”开始。`);
+  showModeTip(`收到你的题目：${file.name}。你可以点“讲解”，我会给你完整思路。`);
   explainBtn.classList.add("btn-pulse");
   setActiveMobileTab("question");
   questionCard?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1532,11 +1533,11 @@ cameraInput?.addEventListener("change", async (e) => {
 
 explainBtn.addEventListener("click", async () => {
   if (!uploaded) {
-    appendMsg("请先上传题目图片，我才能开始讲解。", { isError: true });
+    showModeTip("请先上传题目图片才能开始讲解。", { isError: true });
     return;
   }
   if (!uploadedDataUrl) {
-    appendMsg("图片尚未就绪，请重新上传后再试。", { isError: true });
+    showModeTip("图片尚未就绪，请重新上传后再试。", { isError: true });
     return;
   }
   if (isBusy) return;
@@ -1619,7 +1620,7 @@ clearBtn.addEventListener("click", () => {
   clearPreview();
   explainBtn.classList.remove("btn-pulse");
   fileInput.value = "";
-  appendMsg("题目已清空。重新上传后我会继续讲解。");
+  showModeTip("题目已清空。重新上传后会继续讲解。");
   setActiveMobileTab("question");
 });
 
