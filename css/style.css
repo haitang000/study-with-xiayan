@@ -425,6 +425,7 @@ body {
   grid-template-columns: 1fr 100px;
   gap: 10px;
   min-height: 230px;
+  max-height: 35vh;
   position: relative;
 }
 
@@ -472,6 +473,7 @@ body {
   place-items: center;
   overflow: hidden;
   position: relative;
+  min-height: 0;
 }
 
 .preview-box img {
