@@ -163,7 +163,7 @@ function inferContextWindowByModelName(modelName) {
 
 function getActiveModelRuntimeInfo(targetMode = currentMode) {
   const provider = getProvider();
-  const isProxy = provider === "proxy" || provider === "proxy_default";
+  const isProxy = provider === "proxy";
   const modelKey = getConfiguredModeModel(targetMode);
   const proxyFallbackKey = getProxyModelByMode(targetMode);
   const config = MODEL_CONFIGS[modelKey] || MODEL_CONFIGS[proxyFallbackKey] || null;
@@ -184,7 +184,7 @@ async function probeContextWindowFromApi(provider, modelName, requestUrl) {
   const modelsUrl = guessModelsEndpoint(requestUrl);
   if (!modelsUrl) return 0;
 
-  const noAuthProviders = new Set(["proxy", "proxy_default"]);
+  const noAuthProviders = new Set(["proxy"]);
   const requiresApiKey = !noAuthProviders.has(provider);
   const userApiKey = getUserApiKey(provider);
   if (requiresApiKey && !userApiKey) return 0;
@@ -883,7 +883,7 @@ function getConfiguredModeModel(mode) {
   try {
     const val = localStorage.getItem(storageKey)?.trim();
     if (!val) return defaultModel;
-    if (provider === "proxy" || provider === "proxy_default")
+    if (provider === "proxy")
       return MODEL_CONFIGS[val] ? val : defaultModel;
     if (provider === "native_gemini") {
       return /^gemini/i.test(val) ? val : defaultModel;
@@ -907,9 +907,11 @@ function setConfiguredModeModel(mode, modelKey) {
 
 function getProvider() {
   try {
-    return localStorage.getItem(PROVIDER_STORAGE) || "proxy_default";
+    const p = localStorage.getItem(PROVIDER_STORAGE);
+    if (p === "proxy_default") return "native_gemini";
+    return p || "native_gemini";
   } catch {
-    return "proxy_default";
+    return "native_gemini";
   }
 }
 
@@ -924,7 +926,7 @@ function getProxyModelByMode(mode) {
 }
 
 function getDefaultModelForProvider(provider, mode) {
-  if (provider === "proxy" || provider === "proxy_default")
+  if (provider === "proxy")
     return getProxyModelByMode(mode);
   const defaults = {
     native_gemini: { fast: "gemini-3-flash-preview-nothinking", thinking: "gemini-3.1-pro-preview" },
@@ -1141,9 +1143,9 @@ async function* callModelStream(
 ) {
   const targetMode = options.modeOverride || currentMode;
   const provider = getProvider();
-  const isProxy = provider === "proxy" || provider === "proxy_default";
+  const isProxy = provider === "proxy";
   // proxy 系列通过代理 URL 鉴权，不需要额外的 Authorization 头
-  const noAuthProviders = new Set(["proxy", "proxy_default"]);
+  const noAuthProviders = new Set(["proxy"]);
   const requiresApiKey = !noAuthProviders.has(provider);
   const proxyFallbackKey = getProxyModelByMode(targetMode);
   const config = MODEL_CONFIGS[configKey] || MODEL_CONFIGS[proxyFallbackKey];
@@ -1634,12 +1636,12 @@ settingsModal?.addEventListener("click", (e) => {
 });
 
 providerSelect?.addEventListener("change", () => {
-  const provider = providerSelect.value || "proxy_default";
+  const provider = providerSelect.value || "native_gemini";
   if (baseUrlInput) {
     baseUrlInput.value =
       provider === "custom" ? getProviderBaseUrl("custom") : "";
   }
-  if (provider === "proxy" || provider === "proxy_default") {
+  if (provider === "proxy") {
     if (fastModelInput) fastModelInput.value = getProxyModelByMode("fast");
     if (thinkingModelInput) thinkingModelInput.value = getProxyModelByMode("thinking");
     triggerContextWindowRefresh(currentMode);
@@ -1661,7 +1663,7 @@ providerSelect?.addEventListener("change", () => {
 saveApiKeyBtn?.addEventListener("click", () => {
   const key = apiKeyInput.value.trim();
   try {
-    const provider = providerSelect?.value || "proxy_default";
+    const provider = providerSelect?.value || "native_gemini";
     localStorage.setItem(PROVIDER_STORAGE, provider);
     if (key) localStorage.setItem(USER_API_KEY_STORAGE, key);
     if (provider === "custom") {
@@ -1674,7 +1676,7 @@ saveApiKeyBtn?.addEventListener("click", () => {
     let thinkingModel =
       thinkingModelInput?.value.trim() ||
       getDefaultModelForProvider(provider, "thinking");
-    if (provider === "proxy" || provider === "proxy_default") {
+    if (provider === "proxy") {
       if (!MODEL_CONFIGS[fastModel]) fastModel = getProxyModelByMode("fast");
       if (!MODEL_CONFIGS[thinkingModel])
         thinkingModel = getProxyModelByMode("thinking");
@@ -1698,10 +1700,10 @@ clearApiKeyBtn?.addEventListener("click", () => {
     localStorage.removeItem(FAST_MODEL_STORAGE);
     localStorage.removeItem(THINKING_MODEL_STORAGE);
     apiKeyInput.value = "";
-    if (providerSelect) providerSelect.value = "proxy_default";
+    if (providerSelect) providerSelect.value = "native_gemini";
     if (baseUrlInput) baseUrlInput.value = "";
-    if (fastModelInput) fastModelInput.value = getProxyModelByMode("fast");
-    if (thinkingModelInput) thinkingModelInput.value = getProxyModelByMode("thinking");
+    if (fastModelInput) fastModelInput.value = getDefaultModelForProvider("native_gemini", "fast");
+    if (thinkingModelInput) thinkingModelInput.value = getDefaultModelForProvider("native_gemini", "thinking");
     triggerContextWindowRefresh(currentMode);
     showModeTip("已清除并恢复默认模型");
   } catch (e) {
@@ -1712,11 +1714,11 @@ clearApiKeyBtn?.addEventListener("click", () => {
 
 resetDefaultModelsBtn?.addEventListener("click", () => {
   try {
-    const provider = "proxy_default";
+    const provider = "native_gemini";
     localStorage.setItem(PROVIDER_STORAGE, provider);
     localStorage.removeItem(BASE_URL_STORAGE);
-    const fastModel = getProxyModelByMode("fast");
-    const thinkingModel = getProxyModelByMode("thinking");
+    const fastModel = getDefaultModelForProvider(provider, "fast");
+    const thinkingModel = getDefaultModelForProvider(provider, "thinking");
     setConfiguredModeModel("fast", fastModel);
     setConfiguredModeModel("thinking", thinkingModel);
     if (providerSelect) providerSelect.value = provider;
@@ -1724,7 +1726,7 @@ resetDefaultModelsBtn?.addEventListener("click", () => {
     if (fastModelInput) fastModelInput.value = fastModel;
     if (thinkingModelInput) thinkingModelInput.value = thinkingModel;
     triggerContextWindowRefresh(currentMode);
-    showModeTip("已恢复默认：快速 DeepSeek，思考 Kimi");
+    showModeTip("已恢复默认：Gemini");
   } catch (e) {
     console.error("[resetDefaultModelsBtn] 恢复默认失败", e);
     showModeTip("恢复默认失败");
