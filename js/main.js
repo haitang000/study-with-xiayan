@@ -1107,36 +1107,56 @@ function extractChunkText(data) {
 }
 
 function createAssistantContentFilter() {
-  let hidingThink = false;
+  let activeTagEnd = null;
+  const tagMap = {
+    "<think>": "</think>",
+    "<thought>": "</thought>",
+    "<thinking>": "</thinking>",
+    "<reasoning>": "</reasoning>",
+  };
+
   return (chunkText) => {
     if (!chunkText) return "";
     let text = String(chunkText);
     let output = "";
 
-    if (hidingThink) {
-      const endIdx = text.indexOf("</think>");
-      if (endIdx === -1) return "";
-      text = text.slice(endIdx + 8);
-      hidingThink = false;
-    }
-
     while (text.length) {
-      const startIdx = text.indexOf("<think>");
-      if (startIdx === -1) {
+      if (activeTagEnd) {
+        const endIdx = text.indexOf(activeTagEnd);
+        if (endIdx === -1) return "";
+        text = text.slice(endIdx + activeTagEnd.length);
+        activeTagEnd = null;
+        continue;
+      }
+
+      let foundTag = null;
+      let earliestIdx = -1;
+
+      for (const tag in tagMap) {
+        const idx = text.indexOf(tag);
+        if (idx !== -1 && (earliestIdx === -1 || idx < earliestIdx)) {
+          earliestIdx = idx;
+          foundTag = tag;
+        }
+      }
+
+      if (earliestIdx === -1) {
         output += text;
         break;
       }
 
-      output += text.slice(0, startIdx);
-      const afterStart = text.slice(startIdx + 7);
-      const endIdx = afterStart.indexOf("</think>");
+      output += text.slice(0, earliestIdx);
+      const afterStart = text.slice(earliestIdx + foundTag.length);
+      activeTagEnd = tagMap[foundTag];
+      const endIdx = afterStart.indexOf(activeTagEnd);
 
       if (endIdx === -1) {
-        hidingThink = true;
+        text = ""; // 剩下的都在思考中
         break;
       }
 
-      text = afterStart.slice(endIdx + 8);
+      text = afterStart.slice(endIdx + activeTagEnd.length);
+      activeTagEnd = null;
     }
 
     return output;
