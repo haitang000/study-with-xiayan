@@ -9,6 +9,8 @@ const chatFeed = document.getElementById("chatFeed");
 const askForm = document.getElementById("askForm");
 const askInput = document.getElementById("askInput");
 const draftInput = document.getElementById("draft");
+const draftPreview = document.getElementById("draftPreview");
+const draftBox = document.querySelector(".draft-box");
 const exportMdBtn = document.getElementById("exportMdBtn");
 const timeTip = document.getElementById("timeTip");
 const ctxRing = document.getElementById("ctxRing");
@@ -1027,6 +1029,21 @@ function renderRichContent(element, text) {
     .forEach((el) => hljs.highlightElement(el));
 }
 
+function renderDraftPreview() {
+  if (!draftPreview || !draftInput) return;
+  const source = String(draftInput.value || "").trim();
+  if (!source) {
+    draftPreview.innerHTML = '<p class="draft-empty">夏彦回答后会自动生成笔记...</p>';
+    return;
+  }
+  renderRichContent(draftPreview, source);
+}
+
+function setDraftEditMode(editing) {
+  if (!draftBox) return;
+  draftBox.classList.toggle("draft-editing", !!editing);
+}
+
 function appendMsg(text, options = {}) {
   const {
     role = "assistant",
@@ -1280,6 +1297,7 @@ async function summarizeToDraft(question, answer) {
       ? `${draftInput.value.trim()}\n\n——\n${note}`
       : note;
     draftInput.scrollTop = draftInput.scrollHeight;
+    renderDraftPreview();
   } catch (error) {
     console.error("[summarizeToDraft] 生成草稿笔记失败", error);
   }
@@ -1687,7 +1705,7 @@ providerSelect?.addEventListener("change", () => {
     return;
   }
   if (provider === "native_claude") {
-    if (fastModelInput) fastModelInput.value = "claude-sonnet-4-6";
+    if (fastModelInput) fastModelInput.value = "claude-opus-4-6";
     if (thinkingModelInput) thinkingModelInput.value = "claude-opus-4-6-thinking";
     triggerContextWindowRefresh(currentMode);
     return;
@@ -1774,6 +1792,19 @@ resetDefaultModelsBtn?.addEventListener("click", () => {
 
 exportMdBtn?.addEventListener("click", exportDraftAsMarkdown);
 
+draftPreview?.addEventListener("click", () => {
+  setDraftEditMode(true);
+  draftInput?.focus();
+});
+
+draftInput?.addEventListener("input", () => {
+  renderDraftPreview();
+});
+
+draftInput?.addEventListener("blur", () => {
+  setDraftEditMode(false);
+});
+
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   if (sidebarOverlay?.classList.contains("show")) {
@@ -1842,6 +1873,8 @@ if (initialSession) {
 setActiveMobileTab("chat");
 updateScrollBottomBtnVisibility();
 refreshContextMeter();
+setDraftEditMode(false);
+renderDraftPreview();
 
 const COMPLIANCE_AGREED_KEY = "xiayan_compliance_agreed_v1";
 if (!localStorage.getItem(COMPLIANCE_AGREED_KEY)) {
