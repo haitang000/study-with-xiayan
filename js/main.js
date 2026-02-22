@@ -113,7 +113,8 @@ function getContextWindowCache() {
   try {
     const cache = JSON.parse(localStorage.getItem(MODEL_CONTEXT_CACHE_STORAGE) || "{}");
     return cache && typeof cache === "object" ? cache : {};
-  } catch {
+  } catch (e) {
+    console.warn("[getContextWindowCache] 读取缓存失败", e);
     return {};
   }
 }
@@ -127,7 +128,9 @@ function setContextWindowCache(key, tokens) {
       updatedAt: Date.now(),
     };
     localStorage.setItem(MODEL_CONTEXT_CACHE_STORAGE, JSON.stringify(cache));
-  } catch { }
+  } catch (e) {
+    console.warn("[setContextWindowCache] 写入缓存失败", e);
+  }
 }
 
 function getContextWindowFromCache(key) {
@@ -473,7 +476,9 @@ async function summarizeSessionTitle(sessionId) {
     for await (const chunk of stream) {
       if (chunk.content) title += chunk.content;
     }
-  } catch { }
+  } catch (e) {
+    console.warn("[summarizeSessionTitle] 生成标题失败", e);
+  }
 
   title = title.replace(/[\n\r"'“”‘’]/g, "").trim();
   if (!title) {
@@ -920,7 +925,7 @@ function getDefaultModelForProvider(provider, mode) {
   if (provider === "proxy" || provider === "proxy_default")
     return getProxyModelByMode(mode);
   const defaults = {
-    native_gemini: { fast: "gemini-3-flash", thinking: "gemini-3.1-pro-preview" },
+    native_gemini: { fast: "gemini-3-flash-preview-nothinking", thinking: "gemini-3.1-pro-preview" },
     native_deepseek: { fast: "deepseek-chat", thinking: "deepseek-reasoner" },
     moonshot: { fast: "moonshot-v1-8k", thinking: "moonshot-v1-32k" },
     openai: { fast: "gpt-4o-mini", thinking: "gpt-4.1" },
@@ -1197,7 +1202,9 @@ async function* callModelStream(
         const data = JSON.parse(dataStr);
         const content = extractChunkText(data);
         if (content || data.usage) yield { content, usage: data.usage };
-      } catch (e) { }
+      } catch (e) {
+        console.warn("[callModelStream] SSE chunk 解析失败", dataStr, e);
+      }
     }
   }
 }
@@ -1236,7 +1243,9 @@ async function summarizeToDraft(question, answer) {
       ? `${draftInput.value.trim()}\n\n——\n${note}`
       : note;
     draftInput.scrollTop = draftInput.scrollHeight;
-  } catch (error) { }
+  } catch (error) {
+    console.error("[summarizeToDraft] 生成草稿笔记失败", error);
+  }
 }
 
 async function initGreeting() {
@@ -1252,7 +1261,7 @@ async function initGreeting() {
       {
         role: "user",
         content:
-          "你正在给华生发消息，自然地向华生打个招呼吧。记得保持你的性格特点，不要输出Markdown，不要解释设定，也不要用括号表示动作或表情，更不要代入场景。",
+          "你正在给华生发消息，自然地向华生打个招呼吧。记得保持你的性格特点，不要输出Markdown，不要解释设定，也不要用括号表示动作或表情，更不要代入场景，尽量简短，减少Token消耗。",
       },
     ];
 
@@ -1284,6 +1293,7 @@ async function initGreeting() {
     conversation.push({ role: "assistant", content: fullText });
     appendSessionMessage("assistant", fullText);
   } catch (e) {
+    console.error("[initGreeting] 初始化问候失败", e);
     msgBody.classList.add("error-box");
     msgBody.innerHTML =
       "嘿，华生，你来啦！刚才信号好像有点不稳定……（初始化失败）";
@@ -1470,6 +1480,7 @@ explainBtn.addEventListener("click", async () => {
     updateCharacterBubble("讲解完成。你可以继续追问“为什么这么做”。");
     if (lastUsage) updateContextByUsage(lastUsage);
   } catch (error) {
+    console.error("[explainBtn] 讲解请求失败", error);
     thinkingMsg.remove();
     appendMsg(`讲解失败：${error.message}`, { isError: true });
   } finally {
@@ -1554,6 +1565,7 @@ askForm.addEventListener("submit", async (e) => {
     await summarizeToDraft(q, fullText);
     if (lastUsage) updateContextByUsage(lastUsage);
   } catch (error) {
+    console.error("[askForm] 追问请求失败", error);
     if (thinkingMsg) thinkingMsg.remove();
     appendMsg(`追问失败：${error.message}`, { isError: true });
   } finally {
@@ -1604,7 +1616,8 @@ clearHistoryBtn?.addEventListener("click", () => {
     loadSession(session.id);
     initGreeting();
     showModeTip("已创建新对话");
-  } catch {
+  } catch (e) {
+    console.error("[clearHistoryBtn] 创建新对话失败", e);
     showModeTip("创建失败");
   }
 });
@@ -1628,8 +1641,8 @@ providerSelect?.addEventListener("change", () => {
     return;
   }
   if (provider === "native_gemini") {
-    if (fastModelInput) fastModelInput.value = "gemini-2.0-flash";
-    if (thinkingModelInput) thinkingModelInput.value = "gemini-2.5-pro";
+    if (fastModelInput) fastModelInput.value = "gemini-3-flash-preview-nothinking";
+    if (thinkingModelInput) thinkingModelInput.value = "gemini-3.1-pro-preview";
     triggerContextWindowRefresh(currentMode);
     return;
   }
@@ -1666,7 +1679,8 @@ saveApiKeyBtn?.addEventListener("click", () => {
     triggerContextWindowRefresh(currentMode);
     showModeTip("设置已保存");
     setSettingsModalOpen(false);
-  } catch {
+  } catch (e) {
+    console.error("[saveApiKeyBtn] 保存设置失败", e);
     showModeTip("保存失败：浏览器禁止了本地存储");
   }
 });
@@ -1685,7 +1699,8 @@ clearApiKeyBtn?.addEventListener("click", () => {
     if (thinkingModelInput) thinkingModelInput.value = getProxyModelByMode("thinking");
     triggerContextWindowRefresh(currentMode);
     showModeTip("已清除并恢复默认模型");
-  } catch {
+  } catch (e) {
+    console.error("[clearApiKeyBtn] 清除设置失败", e);
     showModeTip("清除失败");
   }
 });
@@ -1705,7 +1720,8 @@ resetDefaultModelsBtn?.addEventListener("click", () => {
     if (thinkingModelInput) thinkingModelInput.value = thinkingModel;
     triggerContextWindowRefresh(currentMode);
     showModeTip("已恢复默认：快速 DeepSeek，思考 Kimi");
-  } catch {
+  } catch (e) {
+    console.error("[resetDefaultModelsBtn] 恢复默认失败", e);
     showModeTip("恢复默认失败");
   }
 });
