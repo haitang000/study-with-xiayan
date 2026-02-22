@@ -30,7 +30,8 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: rgba(228, 192, 94, 0.4); /* 使用 --line 的半透明色 */
+  background-color: rgba(228, 192, 94, 0.4);
+  /* 使用 --line 的半透明色 */
   border-radius: 10px;
   transition: background-color 0.3s;
 }
@@ -94,6 +95,7 @@ body {
 }
 
 @media (hover: none) {
+
   .panel:hover,
   .esc:hover,
   .q-actions button:hover,
@@ -524,9 +526,11 @@ body {
   0% {
     box-shadow: 0 0 0 0 rgba(242, 154, 63, 0.4);
   }
+
   70% {
     box-shadow: 0 0 0 10px rgba(242, 154, 63, 0);
   }
+
   100% {
     box-shadow: 0 0 0 0 rgba(242, 154, 63, 0);
   }
@@ -560,6 +564,7 @@ body {
     opacity: 0;
     transform: translateX(-10px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -626,9 +631,11 @@ body {
 .msg-body p {
   margin: 0 0 0.8em;
 }
+
 .msg-body p:last-child {
   margin-bottom: 0;
 }
+
 .msg-body code {
   font-family: "Consolas", "Monaco", monospace;
   background: rgba(0, 0, 0, 0.06);
@@ -636,6 +643,7 @@ body {
   border-radius: 4px;
   font-size: 0.9em;
 }
+
 .msg-body pre {
   background: #1e1e1e;
   color: #d4d4d4;
@@ -645,37 +653,44 @@ body {
   margin: 1em 0;
   border: 1px solid #333;
 }
+
 .msg-body pre code {
   background: transparent;
   padding: 0;
   font-size: 14px;
 }
+
 .msg-body ul,
 .msg-body ol {
   padding-left: 20px;
   margin: 0.8em 0;
 }
+
 .msg-body blockquote {
   border-left: 4px solid var(--line);
   margin: 0;
   padding-left: 12px;
   color: var(--muted);
 }
+
 .msg-body table {
   border-collapse: collapse;
   width: 100%;
   margin: 1em 0;
   font-size: 14px;
 }
+
 .msg-body th,
 .msg-body td {
   border: 1px solid var(--line);
   padding: 8px;
   text-align: left;
 }
+
 .msg-body th {
   background: var(--panel-2);
 }
+
 .msg-body img {
   max-width: 100%;
   height: auto;
@@ -694,12 +709,10 @@ body {
 
 .skeleton-bar {
   height: 14px;
-  background: linear-gradient(
-    90deg,
-    rgba(228, 192, 94, 0.1) 25%,
-    rgba(228, 192, 94, 0.25) 50%,
-    rgba(228, 192, 94, 0.1) 75%
-  );
+  background: linear-gradient(90deg,
+      rgba(228, 192, 94, 0.1) 25%,
+      rgba(228, 192, 94, 0.25) 50%,
+      rgba(228, 192, 94, 0.1) 75%);
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.5s infinite linear;
   border-radius: 6px;
@@ -708,6 +721,7 @@ body {
 .skeleton-bar:nth-child(2) {
   width: 85%;
 }
+
 .skeleton-bar:nth-child(3) {
   width: 60%;
 }
@@ -716,6 +730,7 @@ body {
   0% {
     background-position: 100% 0;
   }
+
   100% {
     background-position: -100% 0;
   }
@@ -792,7 +807,7 @@ body {
   background: #fffdf6;
 }
 
-.context-ring > span {
+.context-ring>span {
   position: relative;
   z-index: 1;
   color: #8a6f3a;
@@ -1338,13 +1353,16 @@ body {
   bottom: 0;
   height: calc(62px + env(safe-area-inset-bottom, 0px));
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
-  background: rgba(255, 250, 235, 0.95);
-  border-top: 1px solid #ebcb83;
-  backdrop-filter: blur(8px);
+  background: rgba(255, 252, 244, 0.88);
+  border-top: none;
+  box-shadow: 0 -4px 20px rgba(193, 148, 63, 0.1);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   z-index: 10002;
   display: none;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
+  border-radius: 20px 20px 0 0;
 }
 
 .tab-btn {
@@ -1386,6 +1404,7 @@ textarea {
     opacity: 0;
     transform: translateY(30px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -1458,13 +1477,15 @@ textarea {
   }
 
   .chat {
-    grid-template-rows: 42px auto minmax(260px, 1fr) auto auto;
+    grid-template-rows: auto minmax(260px, 1fr) auto auto;
     min-height: clamp(520px, 74dvh, 700px);
+    border-radius: 20px;
+    padding-top: 6px;
   }
 
+  /* 在移动端隐藏多余的标题栏，依靠底部 Tab 即可 */
   .head {
-    font-size: 16px;
-    padding: 0 12px;
+    display: none;
   }
 
   .question-card {
@@ -1504,7 +1525,7 @@ textarea {
     padding-bottom: 74px;
     scroll-padding-bottom: 82px;
   }
-  
+
   body.keyboard-up .chat-feed {
     padding-bottom: 20px;
     scroll-padding-bottom: 20px;
@@ -1519,20 +1540,40 @@ textarea {
     position: relative;
     bottom: auto;
     z-index: 3;
-    background: #fff;
-    margin: 0 10px 10px;
-    min-height: 46px;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(10px);
+    margin: 8px 12px 14px;
+    min-height: 52px;
+    border-radius: 26px;
+    border: 1px solid rgba(238, 216, 139, 0.6);
+    box-shadow: 0 6px 16px rgba(184, 134, 43, 0.12);
   }
 
   .ask input,
   .ask textarea {
     font-size: 16px;
-    padding: 10px 12px;
+    padding: 12px 16px;
   }
 
   .ask button {
-    min-width: 68px;
-    padding: 0 10px;
+    min-width: 48px;
+    padding: 0;
+    width: 44px;
+    height: 44px;
+    margin: 4px 6px 4px 0;
+    border-radius: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ask button .send-label {
+    display: none;
+  }
+
+  .ask button i {
+    margin: 0;
+    font-size: 18px;
   }
 
   .context-meter {
@@ -1560,11 +1601,15 @@ textarea {
 
   body.is-mobile .scroll-bottom-btn {
     position: fixed;
-    right: 14px;
-    bottom: calc(126px + env(safe-area-inset-bottom, 0px));
-    width: 40px;
-    height: 40px;
+    right: 18px;
+    bottom: calc(130px + env(safe-area-inset-bottom, 0px));
+    width: 44px;
+    height: 44px;
     z-index: 8;
+    background: rgba(255, 244, 215, 0.85);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(239, 204, 111, 0.5);
+    box-shadow: 0 8px 20px rgba(115, 80, 26, 0.15);
   }
 
   body.is-mobile.keyboard-up .mobile-tabbar,
@@ -1611,7 +1656,7 @@ textarea {
   }
 
   .chat {
-    grid-template-rows: 44px auto minmax(260px, 1fr) auto auto;
+    grid-template-rows: auto minmax(260px, 1fr) auto auto;
   }
 
   .question-card {
