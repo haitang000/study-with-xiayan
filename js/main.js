@@ -127,7 +127,7 @@ function setContextWindowCache(key, tokens) {
       updatedAt: Date.now(),
     };
     localStorage.setItem(MODEL_CONTEXT_CACHE_STORAGE, JSON.stringify(cache));
-  } catch {}
+  } catch { }
 }
 
 function getContextWindowFromCache(key) {
@@ -179,14 +179,9 @@ async function probeContextWindowFromApi(provider, modelName, requestUrl) {
   const modelsUrl = guessModelsEndpoint(requestUrl);
   if (!modelsUrl) return 0;
 
-  const noAuthProviders = new Set([
-    "proxy",
-    "proxy_default",
-    "native_deepseek",
-    "native_gemini",
-  ]);
+  const noAuthProviders = new Set(["proxy", "proxy_default"]);
   const requiresApiKey = !noAuthProviders.has(provider);
-  const userApiKey = getUserApiKey();
+  const userApiKey = getUserApiKey(provider);
   if (requiresApiKey && !userApiKey) return 0;
 
   const controller = new AbortController();
@@ -252,7 +247,7 @@ async function updateModelContextWindow(targetMode = currentMode) {
 }
 
 function triggerContextWindowRefresh(targetMode = currentMode) {
-  updateModelContextWindow(targetMode).catch(() => {});
+  updateModelContextWindow(targetMode).catch(() => { });
 }
 
 function getStoredSessions() {
@@ -267,13 +262,13 @@ function getStoredSessions() {
         updatedAt: item?.updatedAt || item?.createdAt || formatTime(),
         messages: Array.isArray(item?.messages)
           ? item.messages
-              .filter((msg) => msg && (msg.role === "user" || msg.role === "assistant"))
-              .map((msg) => ({
-                role: msg.role,
-                text: String(msg.text || "").trim(),
-                time: msg.time || formatTime(),
-              }))
-              .filter((msg) => msg.text)
+            .filter((msg) => msg && (msg.role === "user" || msg.role === "assistant"))
+            .map((msg) => ({
+              role: msg.role,
+              text: String(msg.text || "").trim(),
+              time: msg.time || formatTime(),
+            }))
+            .filter((msg) => msg.text)
           : [],
       }));
   } catch {
@@ -286,11 +281,11 @@ function trimSessionPayload(sessions, maxCharsPerMessage = 4000) {
     ...session,
     messages: Array.isArray(session.messages)
       ? session.messages
-          .map((msg) => ({
-            ...msg,
-            text: String(msg?.text || "").slice(-maxCharsPerMessage),
-          }))
-          .filter((msg) => msg.text)
+        .map((msg) => ({
+          ...msg,
+          text: String(msg?.text || "").slice(-maxCharsPerMessage),
+        }))
+        .filter((msg) => msg.text)
       : [],
   }));
 }
@@ -303,7 +298,7 @@ function saveSessions(sessions) {
   try {
     localStorage.setItem(CHAT_SESSIONS_STORAGE, JSON.stringify(normalizedSessions));
     return;
-  } catch {}
+  } catch { }
 
   // 存储空间不足时，逐步压缩最新会话内容，再移除更早会话，尽可能保留最近记录。
   const working = normalizedSessions.map((session) => ({
@@ -317,7 +312,7 @@ function saveSessions(sessions) {
     try {
       localStorage.setItem(CHAT_SESSIONS_STORAGE, JSON.stringify(working));
       return;
-    } catch {}
+    } catch { }
 
     const newest = working[working.length - 1];
     if (newest?.messages?.length > 8) {
@@ -353,7 +348,7 @@ function saveSessions(sessions) {
   try {
     localStorage.removeItem(CHAT_SESSIONS_STORAGE);
     localStorage.setItem(CHAT_SESSIONS_STORAGE, "[]");
-  } catch {}
+  } catch { }
 }
 
 function setCurrentSessionId(sessionId) {
@@ -364,7 +359,7 @@ function setCurrentSessionId(sessionId) {
     } else {
       localStorage.removeItem(CHAT_ACTIVE_SESSION_STORAGE);
     }
-  } catch {}
+  } catch { }
 }
 
 function getActiveSessionId() {
@@ -478,7 +473,7 @@ async function summarizeSessionTitle(sessionId) {
     for await (const chunk of stream) {
       if (chunk.content) title += chunk.content;
     }
-  } catch {}
+  } catch { }
 
   title = title.replace(/[\n\r"'“”‘’]/g, "").trim();
   if (!title) {
@@ -853,7 +848,20 @@ function setMode(mode) {
   triggerContextWindowRefresh(mode);
 }
 
-function getUserApiKey() {
+function getUserApiKey(provider) {
+  // 根据 provider 优先从 env.local.js (RUNTIME_ENV) 中读取对应 API Key
+  const envKeyMap = {
+    native_deepseek: "DEEPSEEK_API_KEY",
+    deepseek: "DEEPSEEK_API_KEY",
+    native_gemini: "GEMINI_API_KEY",
+    moonshot: "KIMI_API_KEY",
+  };
+  const envKey = provider && envKeyMap[provider];
+  if (envKey) {
+    const envValue = readRuntimeEnv(envKey);
+    if (envValue) return envValue;
+  }
+  // 回退到用户在设置面板中手动填写的 key
   try {
     return localStorage.getItem(USER_API_KEY_STORAGE)?.trim() || "";
   } catch {
@@ -887,7 +895,7 @@ function setConfiguredModeModel(mode, modelKey) {
   if (!modelKey) return;
   try {
     localStorage.setItem(storageKey, modelKey.trim());
-  } catch {}
+  } catch { }
 }
 
 function getProvider() {
@@ -912,7 +920,7 @@ function getDefaultModelForProvider(provider, mode) {
   if (provider === "proxy" || provider === "proxy_default")
     return getProxyModelByMode(mode);
   const defaults = {
-    native_gemini: { fast: "gemini-3-flash", thinking: "gemini-3-flash" },
+    native_gemini: { fast: "gemini-3-flash", thinking: "gemini-3.1-pro-preview" },
     native_deepseek: { fast: "deepseek-chat", thinking: "deepseek-reasoner" },
     moonshot: { fast: "moonshot-v1-8k", thinking: "moonshot-v1-32k" },
     openai: { fast: "gpt-4o-mini", thinking: "gpt-4.1" },
@@ -1127,12 +1135,8 @@ async function* callModelStream(
   const targetMode = options.modeOverride || currentMode;
   const provider = getProvider();
   const isProxy = provider === "proxy" || provider === "proxy_default";
-  const noAuthProviders = new Set([
-    "proxy",
-    "proxy_default",
-    "native_deepseek",
-    "native_gemini",
-  ]);
+  // proxy 系列通过代理 URL 鉴权，不需要额外的 Authorization 头
+  const noAuthProviders = new Set(["proxy", "proxy_default"]);
   const requiresApiKey = !noAuthProviders.has(provider);
   const proxyFallbackKey = getProxyModelByMode(targetMode);
   const config = MODEL_CONFIGS[configKey] || MODEL_CONFIGS[proxyFallbackKey];
@@ -1143,7 +1147,8 @@ async function* callModelStream(
   const modelName = isProxy
     ? config.model
     : getConfiguredModeModel(targetMode);
-  const userApiKey = getUserApiKey();
+  // 传入 provider 以便优先从 env.local.js 读取对应 API Key
+  const userApiKey = getUserApiKey(provider);
   const requestUrl = isProxy ? config.url : getProviderBaseUrl(provider);
   const payload = {
     model: modelName,
@@ -1156,7 +1161,7 @@ async function* callModelStream(
 
   if (!requestUrl) throw new Error("请在设置中填写有效的 API Base URL");
   if (requiresApiKey && !userApiKey)
-    throw new Error("请先在设置中填写 API Key");
+    throw new Error("请先在设置中填写 API Key（或在 env.local.js 中配置对应的 API Key）");
 
   const response = await fetch(requestUrl, {
     method: "POST",
@@ -1192,7 +1197,7 @@ async function* callModelStream(
         const data = JSON.parse(dataStr);
         const content = extractChunkText(data);
         if (content || data.usage) yield { content, usage: data.usage };
-      } catch (e) {}
+      } catch (e) { }
     }
   }
 }
@@ -1231,7 +1236,7 @@ async function summarizeToDraft(question, answer) {
       ? `${draftInput.value.trim()}\n\n——\n${note}`
       : note;
     draftInput.scrollTop = draftInput.scrollHeight;
-  } catch (error) {}
+  } catch (error) { }
 }
 
 async function initGreeting() {
