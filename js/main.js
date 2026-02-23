@@ -571,8 +571,12 @@ function fileToDataUrl(file) {
 }
 
 function openImageLightbox() {
-  const src = previewImg.getAttribute("src");
+  const src = uploadedDataUrl || previewImg.currentSrc || previewImg.getAttribute("src");
   if (!src) return;
+  if (!previewImg.complete || previewImg.naturalWidth === 0) {
+    showModeTip("图片还没准备好，请稍后再试或重新上传。");
+    return;
+  }
   lightboxImg.src = src;
   imageLightbox.classList.add("show");
   imageLightbox.setAttribute("aria-hidden", "false");
@@ -676,9 +680,19 @@ async function handleImageFileSelection(file) {
 
   if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
   previewObjectUrl = URL.createObjectURL(compressed);
+  previewImg.onload = null;
+  previewImg.onerror = null;
+  previewImg.onload = () => {
+    previewImg.style.display = "block";
+    placeholder.style.display = "none";
+  };
+  previewImg.onerror = () => {
+    previewImg.style.display = "none";
+    previewImg.removeAttribute("src");
+    placeholder.style.display = "block";
+    showModeTip("图片格式暂不支持预览，请换一张试试。");
+  };
   previewImg.src = previewObjectUrl;
-  previewImg.style.display = "block";
-  placeholder.style.display = "none";
 
   try { uploadedDataUrl = await fileToDataUrl(compressed); }
   catch (error) { clearPreview(false); appendMsg(error.message, { isError: true }); return; }
@@ -708,6 +722,10 @@ cameraInput?.addEventListener("change", async (e) => {
 });
 
 previewImg.addEventListener("click", openImageLightbox);
+previewImg.addEventListener("touchend", (e) => {
+  e.preventDefault();
+  openImageLightbox();
+}, { passive: false });
 imageLightboxClose?.addEventListener("click", closeImageLightbox);
 imageLightbox?.addEventListener("click", (e) => {
   if (e.target === imageLightbox) closeImageLightbox();

@@ -483,6 +483,7 @@ body {
   display: none;
   background: white;
   cursor: zoom-in;
+  touch-action: manipulation;
 }
 
 .image-lightbox {
