@@ -1009,6 +1009,49 @@ function getUserAvatar() {
   }
 }
 
+const MAX_AVATAR_STORAGE_SIZE = 350 * 1024;
+
+function estimateBase64Bytes(dataUrl = "") {
+  const base64Part = String(dataUrl).split(",")[1] || "";
+  const padding = (base64Part.match(/=+$/)?.[0].length || 0);
+  return Math.max(0, Math.floor((base64Part.length * 3) / 4) - padding);
+}
+
+function loadImageElement(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("image load failed"));
+    img.src = src;
+  });
+}
+
+async function compressAvatarDataUrl(dataUrl) {
+  if (!dataUrl || !dataUrl.startsWith("data:image/")) return dataUrl;
+  const image = await loadImageElement(dataUrl);
+  const maxSide = 512;
+  const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+  const width = Math.max(1, Math.round(image.width * scale));
+  const height = Math.max(1, Math.round(image.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return dataUrl;
+  ctx.drawImage(image, 0, 0, width, height);
+
+  let quality = 0.88;
+  let nextDataUrl = canvas.toDataURL("image/webp", quality);
+  while (estimateBase64Bytes(nextDataUrl) > MAX_AVATAR_STORAGE_SIZE && quality > 0.52) {
+    quality -= 0.08;
+    nextDataUrl = canvas.toDataURL("image/webp", quality);
+  }
+  if (estimateBase64Bytes(nextDataUrl) > MAX_AVATAR_STORAGE_SIZE) {
+    return canvas.toDataURL("image/jpeg", 0.68);
+  }
+  return nextDataUrl;
+}
+
 function renderSettingsAvatarPreview(avatarUrl = getUserAvatar()) {
   const nextUrl = String(avatarUrl || "").trim();
   if (settingsAvatarPreview) {
@@ -1790,7 +1833,7 @@ providerSelect?.addEventListener("change", () => {
   triggerContextWindowRefresh(currentMode);
 });
 
-saveApiKeyBtn?.addEventListener("click", () => {
+saveApiKeyBtn?.addEventListener("click", async () => {
   const key = apiKeyInput.value.trim();
   try {
     const provider = providerSelect?.value || "native_gemini";
@@ -1817,11 +1860,17 @@ saveApiKeyBtn?.addEventListener("click", () => {
     const avatarUrl = (avatarUrlInput?.value || "").trim();
     localStorage.setItem(USER_NICKNAME_STORAGE, nickname);
     if (avatarUrl) {
-      localStorage.setItem(USER_AVATAR_STORAGE, avatarUrl);
+      let avatarToStore = avatarUrl;
+      if (avatarToStore.startsWith("data:image/") && estimateBase64Bytes(avatarToStore) > MAX_AVATAR_STORAGE_SIZE) {
+        avatarToStore = await compressAvatarDataUrl(avatarToStore);
+      }
+      localStorage.setItem(USER_AVATAR_STORAGE, avatarToStore);
+      if (avatarUrlInput) avatarUrlInput.value = avatarToStore;
+      renderSettingsAvatarPreview(avatarToStore);
     } else {
       localStorage.removeItem(USER_AVATAR_STORAGE);
+      renderSettingsAvatarPreview("");
     }
-    renderSettingsAvatarPreview(avatarUrl);
     refreshUserAvatarsInFeed();
     triggerContextWindowRefresh(currentMode);
     showModeTip("设置已保存");
@@ -1896,9 +1945,14 @@ avatarFileInput?.addEventListener("change", async (e) => {
   }
   try {
     const dataUrl = await fileToDataUrl(file);
-    if (avatarUrlInput) avatarUrlInput.value = dataUrl;
-    renderSettingsAvatarPreview(dataUrl);
-    showModeTip("头像已就绪，记得点击保存");
+    const optimizedDataUrl = await compressAvatarDataUrl(dataUrl);
+    if (avatarUrlInput) avatarUrlInput.value = optimizedDataUrl;
+    renderSettingsAvatarPreview(optimizedDataUrl);
+    if (optimizedDataUrl !== dataUrl) {
+      showModeTip("头像已压缩优化，记得点击保存");
+    } else {
+      showModeTip("头像已就绪，记得点击保存");
+    }
   } catch {
     showModeTip("头像读取失败");
   } finally {
