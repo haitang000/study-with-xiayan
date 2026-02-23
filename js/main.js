@@ -11,7 +11,9 @@ import {
   setCurrentSessionId, getCurrentSessionIdValue, getActiveSessionId,
   updateSession,
   getUserApiKey, getProvider, getConfiguredModeModel, setConfiguredModeModel,
-  getUserNickname, getGreetingTargetName, getUserAvatar,
+  getUserNickname as getStoredUserNickname,
+  getGreetingTargetName as getStoredGreetingTargetName,
+  getUserAvatar as getStoredUserAvatar,
 } from "./storage.js";
 import {
   getCurrentMode, setCurrentMode, getContextWindowTokens,
@@ -154,7 +156,7 @@ function renderRichContent(element, text) {
 // ── 消息 & 头像 ──
 function applyUserIdentityToAvatar(avatarEl, role) {
   if (!avatarEl || role !== "user") return;
-  const nickname = getUserNickname(), avatarUrl = getUserAvatar();
+  const nickname = getStoredUserNickname(), avatarUrl = getStoredUserAvatar();
   avatarEl.title = nickname;
   if (avatarUrl) {
     Object.assign(avatarEl.style, { backgroundImage: `url("${avatarUrl}")`, backgroundSize: "cover", backgroundPosition: "center", fontSize: "0" });
@@ -432,7 +434,7 @@ async function compressAvatarDataUrl(dataUrl) {
   return nextDataUrl;
 }
 
-function renderSettingsAvatarPreview(avatarUrl = getUserAvatar()) {
+function renderSettingsAvatarPreview(avatarUrl = getStoredUserAvatar()) {
   const nextUrl = String(avatarUrl || "").trim();
   if (settingsAvatarPreview) settingsAvatarPreview.src = nextUrl || "assets/img/user_avatar.png";
   if (clearAvatarBtn) clearAvatarBtn.hidden = !nextUrl;
@@ -445,8 +447,8 @@ function openSettingsPanel() {
   if (baseUrlInput) baseUrlInput.value = provider === "custom" ? getProviderBaseUrl("custom") : "";
   if (fastModelInput) fastModelInput.value = getConfiguredModeModel("fast");
   if (thinkingModelInput) thinkingModelInput.value = getConfiguredModeModel("thinking");
-  if (nicknameInput) nicknameInput.value = getUserNickname();
-  const av = getUserAvatar();
+  if (nicknameInput) nicknameInput.value = getStoredUserNickname();
+  const av = getStoredUserAvatar();
   if (avatarUrlInput) avatarUrlInput.value = av;
   renderSettingsAvatarPreview(av);
   setSettingsModalOpen(true);
@@ -571,7 +573,7 @@ async function initGreeting() {
   try {
     const messages = [
       { role: "system", content: getSystemPrompt() },
-      { role: "user", content: `你正在给华生发消息，华生昵称是"${getGreetingTargetName()}"。请自然地向 TA 打个招呼，并优先使用这个昵称称呼。记得保持你的性格特点，不要输出Markdown，不要解释设定，不要说明 Prompt，也不要用括号表示动作或表情，更不要代入场景，尽量简短，减少Token消耗。` },
+      { role: "user", content: `你正在给华生发消息，华生昵称是"${getStoredGreetingTargetName()}"。请自然地向 TA 打个招呼，并优先使用这个昵称称呼。记得保持你的性格特点，不要输出Markdown，不要解释设定，不要说明 Prompt，也不要用括号表示动作或表情，更不要代入场景，尽量简短，减少Token消耗。` },
     ];
     const { fullText } = await streamToElement(msgBody, callModelStream(messages));
     conversation.push({ role: "assistant", content: fullText });
