@@ -166,8 +166,8 @@ export function createAssistantContentFilter() {
 // ── SSE 流式请求（含重试） ──
 function extractChunkText(data) {
   const delta = data?.choices?.[0]?.delta || {};
+  // 仅渲染最终回答，隐藏模型的推理流（reasoning_content）。
   if (typeof delta.content === "string") return delta.content;
-  if (typeof delta.reasoning_content === "string") return delta.reasoning_content;
   if (Array.isArray(delta.content)) {
     return delta.content.map((item) => (typeof item === "string" ? item : item?.text || "")).join("");
   }
