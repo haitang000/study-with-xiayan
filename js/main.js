@@ -25,6 +25,7 @@ import {
 const $ = (id) => document.getElementById(id);
 const fileInput = $("fileInput"), pickBtn = $("pickBtn"), explainBtn = $("explainBtn"), clearBtn = $("clearBtn");
 const previewImg = $("previewImg"), placeholder = $("placeholder"), chatFeed = $("chatFeed");
+const imageLightbox = $("imageLightbox"), lightboxImg = $("lightboxImg"), imageLightboxClose = $("imageLightboxClose");
 const askForm = $("askForm"), askInput = $("askInput");
 const draftInput = $("draft"), draftPreview = $("draftPreview"), draftBox = document.querySelector(".draft-box");
 const exportMdBtn = $("exportMdBtn"), timeTip = $("timeTip");
@@ -569,8 +570,25 @@ function fileToDataUrl(file) {
   });
 }
 
+function openImageLightbox() {
+  const src = previewImg.getAttribute("src");
+  if (!src) return;
+  lightboxImg.src = src;
+  imageLightbox.classList.add("show");
+  imageLightbox.setAttribute("aria-hidden", "false");
+  document.body.style.overflow = "hidden";
+}
+
+function closeImageLightbox() {
+  imageLightbox.classList.remove("show");
+  imageLightbox.setAttribute("aria-hidden", "true");
+  lightboxImg.removeAttribute("src");
+  document.body.style.overflow = "";
+}
+
 function clearPreview(resetConversation = true) {
   uploaded = null; uploadedDataUrl = "";
+  closeImageLightbox();
   if (previewObjectUrl) { URL.revokeObjectURL(previewObjectUrl); previewObjectUrl = ""; }
   previewImg.style.display = "none"; previewImg.removeAttribute("src");
   placeholder.style.display = "block";
@@ -687,6 +705,15 @@ fileInput.addEventListener("change", async (e) => {
 cameraInput?.addEventListener("change", async (e) => {
   await handleImageFileSelection(e.target.files?.[0]);
   cameraInput.value = "";
+});
+
+previewImg.addEventListener("click", openImageLightbox);
+imageLightboxClose?.addEventListener("click", closeImageLightbox);
+imageLightbox?.addEventListener("click", (e) => {
+  if (e.target === imageLightbox) closeImageLightbox();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && imageLightbox?.classList.contains("show")) closeImageLightbox();
 });
 
 clearBtn.addEventListener("click", () => {

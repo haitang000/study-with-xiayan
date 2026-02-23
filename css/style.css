@@ -482,6 +482,56 @@ body {
   object-fit: contain;
   display: none;
   background: white;
+  cursor: zoom-in;
+}
+
+.image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  background: rgba(0, 0, 0, 0.84);
+  backdrop-filter: blur(3px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.image-lightbox.show {
+  display: flex;
+}
+
+.image-lightbox img {
+  max-width: min(96vw, 1200px);
+  max-height: 90vh;
+  width: auto;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
+  background: #fff;
+}
+
+.image-lightbox-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 22px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.image-lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.34);
+  transform: scale(1.03);
 }
 
 .placeholder {
