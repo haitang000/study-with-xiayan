@@ -25,6 +25,7 @@ import {
 const $ = (id) => document.getElementById(id);
 const fileInput = $("fileInput"), pickBtn = $("pickBtn"), explainBtn = $("explainBtn"), clearBtn = $("clearBtn");
 const previewImg = $("previewImg"), placeholder = $("placeholder"), chatFeed = $("chatFeed");
+const imageLightbox = $("imageLightbox"), lightboxImg = $("lightboxImg"), imageLightboxClose = $("imageLightboxClose");
 const askForm = $("askForm"), askInput = $("askInput");
 const draftInput = $("draft"), draftPreview = $("draftPreview"), draftBox = document.querySelector(".draft-box");
 const exportMdBtn = $("exportMdBtn"), timeTip = $("timeTip");
@@ -569,8 +570,29 @@ function fileToDataUrl(file) {
   });
 }
 
+function openImageLightbox() {
+  const src = uploadedDataUrl || previewImg.currentSrc || previewImg.getAttribute("src");
+  if (!src) return;
+  if (!previewImg.complete || previewImg.naturalWidth === 0) {
+    showModeTip("图片还没准备好，请稍后再试或重新上传。");
+    return;
+  }
+  lightboxImg.src = src;
+  imageLightbox.classList.add("show");
+  imageLightbox.setAttribute("aria-hidden", "false");
+  document.body.style.overflow = "hidden";
+}
+
+function closeImageLightbox() {
+  imageLightbox.classList.remove("show");
+  imageLightbox.setAttribute("aria-hidden", "true");
+  lightboxImg.removeAttribute("src");
+  document.body.style.overflow = "";
+}
+
 function clearPreview(resetConversation = true) {
   uploaded = null; uploadedDataUrl = "";
+  closeImageLightbox();
   if (previewObjectUrl) { URL.revokeObjectURL(previewObjectUrl); previewObjectUrl = ""; }
   previewImg.style.display = "none"; previewImg.removeAttribute("src");
   placeholder.style.display = "block";
@@ -658,9 +680,19 @@ async function handleImageFileSelection(file) {
 
   if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
   previewObjectUrl = URL.createObjectURL(compressed);
+  previewImg.onload = null;
+  previewImg.onerror = null;
+  previewImg.onload = () => {
+    previewImg.style.display = "block";
+    placeholder.style.display = "none";
+  };
+  previewImg.onerror = () => {
+    previewImg.style.display = "none";
+    previewImg.removeAttribute("src");
+    placeholder.style.display = "block";
+    showModeTip("图片格式暂不支持预览，请换一张试试。");
+  };
   previewImg.src = previewObjectUrl;
-  previewImg.style.display = "block";
-  placeholder.style.display = "none";
 
   try { uploadedDataUrl = await fileToDataUrl(compressed); }
   catch (error) { clearPreview(false); appendMsg(error.message, { isError: true }); return; }
@@ -687,6 +719,19 @@ fileInput.addEventListener("change", async (e) => {
 cameraInput?.addEventListener("change", async (e) => {
   await handleImageFileSelection(e.target.files?.[0]);
   cameraInput.value = "";
+});
+
+previewImg.addEventListener("click", openImageLightbox);
+previewImg.addEventListener("touchend", (e) => {
+  e.preventDefault();
+  openImageLightbox();
+}, { passive: false });
+imageLightboxClose?.addEventListener("click", closeImageLightbox);
+imageLightbox?.addEventListener("click", (e) => {
+  if (e.target === imageLightbox) closeImageLightbox();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && imageLightbox?.classList.contains("show")) closeImageLightbox();
 });
 
 clearBtn.addEventListener("click", () => {
