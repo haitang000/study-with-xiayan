@@ -31,6 +31,11 @@ const exportMdBtn = $("exportMdBtn"), timeTip = $("timeTip");
 const ctxRing = $("ctxRing"), ctxPct = $("ctxPct"), ctxText = $("ctxText");
 const questionCard = $("questionCard"), characterBubble = $("characterBubble");
 const askSubmitBtn = askForm.querySelector('button[type="submit"]');
+
+// 兜底：无论何种提交路径都阻止表单触发页面导航
+document.addEventListener("submit", (event) => {
+  if (event.target?.id === "askForm") event.preventDefault();
+}, true);
 const cameraBtn = $("cameraBtn"), cameraInput = $("cameraInput"), scrollBottomBtn = $("scrollBottomBtn");
 const mobileTabButtons = Array.from(document.querySelectorAll(".mobile-tabbar .tab-btn"));
 const modeSwitch = $("modeSwitch"), modeButtons = Array.from(document.querySelectorAll(".mode-btn"));
