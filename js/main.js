@@ -57,10 +57,12 @@ const complianceModal = $("complianceModal"), agreeComplianceBtn = $("agreeCompl
 const modeToast = document.createElement("div");
 modeToast.className = "mode-toast";
 document.body.appendChild(modeToast);
+const LIGHTBOX_ANIM_DURATION = 240;
 
 // ── 应用状态 ──
 let uploaded = null, uploadedDataUrl = "", previewObjectUrl = "";
 let isBusy = false, sidebarCloseTimer = null, toastTimer = null;
+let lightboxCloseTimer = null;
 const conversation = [];
 const systemPromptReady = loadSystemPrompt();
 
@@ -577,6 +579,10 @@ function openImageLightbox() {
     showModeTip("图片还没准备好，请稍后再试或重新上传。");
     return;
   }
+  if (lightboxCloseTimer) {
+    clearTimeout(lightboxCloseTimer);
+    lightboxCloseTimer = null;
+  }
   lightboxImg.src = src;
   imageLightbox.classList.add("show");
   imageLightbox.setAttribute("aria-hidden", "false");
@@ -586,7 +592,11 @@ function openImageLightbox() {
 function closeImageLightbox() {
   imageLightbox.classList.remove("show");
   imageLightbox.setAttribute("aria-hidden", "true");
-  lightboxImg.removeAttribute("src");
+  if (lightboxCloseTimer) clearTimeout(lightboxCloseTimer);
+  lightboxCloseTimer = setTimeout(() => {
+    lightboxImg.removeAttribute("src");
+    lightboxCloseTimer = null;
+  }, LIGHTBOX_ANIM_DURATION);
   document.body.style.overflow = "";
 }
 
