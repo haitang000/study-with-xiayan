@@ -240,6 +240,50 @@ function createSession(initialTitle = "新的对话") {
   return session;
 }
 
+function sessionHasUserInput(session) {
+  return !!session?.messages?.some((item) => item?.role === "user" && String(item?.text || "").trim());
+}
+
+function removeSessionById(sessionId) {
+  const sessions = getStoredSessions();
+  const target = sessions.find((item) => item.id === sessionId);
+  if (!target) return false;
+  const remaining = sessions.filter((item) => item.id !== sessionId);
+  saveSessions(remaining);
+  if (sessionId === getCurrentSessionIdValue()) {
+    if (remaining.length) {
+      const latest = remaining.slice().sort((a, b) => getSessionSortTimestamp(b) - getSessionSortTimestamp(a))[0];
+      setCurrentSessionId(latest.id);
+    } else {
+      setCurrentSessionId("");
+    }
+  }
+  return true;
+}
+
+function cleanupSessionIfNoUserInput(sessionId) {
+  const session = getStoredSessions().find((item) => item.id === sessionId);
+  if (!session || sessionHasUserInput(session)) return false;
+  return removeSessionById(sessionId);
+}
+
+function cleanupAllSessionsWithoutUserInput() {
+  const sessions = getStoredSessions();
+  if (!sessions.length) return;
+  const activeId = getCurrentSessionIdValue() || getActiveSessionId();
+  const remaining = sessions.filter((item) => sessionHasUserInput(item));
+  if (remaining.length === sessions.length) return;
+  saveSessions(remaining);
+  if (!activeId) return;
+  const activeStillExists = remaining.some((item) => item.id === activeId);
+  if (activeStillExists) {
+    setCurrentSessionId(activeId);
+    return;
+  }
+  const latest = remaining.slice().sort((a, b) => getSessionSortTimestamp(b) - getSessionSortTimestamp(a))[0];
+  setCurrentSessionId(latest?.id || "");
+}
+
 function getCurrentSession(createIfMissing = true) {
   const sessions = getStoredSessions();
   const cid = getCurrentSessionIdValue();
@@ -287,6 +331,8 @@ async function summarizeSessionTitle(sessionId) {
 }
 
 function loadSession(sessionId) {
+  const previousSessionId = getCurrentSessionIdValue();
+  if (previousSessionId && previousSessionId !== sessionId) cleanupSessionIfNoUserInput(previousSessionId);
   const session = getStoredSessions().find((i) => i.id === sessionId);
   if (!session) return;
   setCurrentSessionId(session.id);
@@ -919,8 +965,15 @@ triggerContextWindowRefresh("fast");
 timeTip.textContent = formatTime();
 
 const initialSession = getCurrentSession(false);
-if (initialSession) { loadSession(initialSession.id); }
-else { renderHistoryList(); initGreeting(); }
+if (initialSession) cleanupSessionIfNoUserInput(initialSession.id);
+cleanupAllSessionsWithoutUserInput();
+const newSession = createSession("新的对话");
+loadSession(newSession.id);
+initGreeting();
+
+window.addEventListener("pagehide", () => {
+  cleanupSessionIfNoUserInput(getCurrentSessionIdValue());
+});
 
 setActiveMobileTab("chat");
 updateScrollBottomBtnVisibility();
