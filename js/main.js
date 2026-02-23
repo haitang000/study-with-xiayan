@@ -388,27 +388,6 @@ function setSettingsModalOpen(open) {
   settingsModal.setAttribute("aria-hidden", open ? "false" : "true");
 }
 
-function getUserNickname() {
-  try {
-    return localStorage.getItem(USER_NICKNAME_STORAGE)?.trim() || "你";
-  } catch {
-    return "你";
-  }
-}
-
-function getGreetingTargetName() {
-  const nickname = getUserNickname();
-  if (!nickname || nickname === "你") return "华生";
-  return nickname;
-}
-
-function getUserAvatar() {
-  try {
-    return localStorage.getItem(USER_AVATAR_STORAGE)?.trim() || "";
-  } catch {
-    return "";
-  }
-}
 
 const MAX_AVATAR_STORAGE_SIZE = 350 * 1024;
 
@@ -804,7 +783,7 @@ saveApiKeyBtn?.addEventListener("click", async () => {
       renderSettingsAvatarPreview("");
     }
     refreshUserAvatarsInFeed();
-    triggerContextWindowRefresh(currentMode);
+    triggerContextWindowRefresh(getCurrentMode());
     showModeTip("设置已保存");
     setSettingsModalOpen(false);
   } catch (e) {
