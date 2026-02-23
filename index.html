@@ -86,6 +86,13 @@
         <input id="cameraInput" type="file" accept="image/*" capture="environment" hidden />
       </section>
 
+      <div class="image-lightbox" id="imageLightbox" aria-hidden="true">
+        <button type="button" class="image-lightbox-close" id="imageLightboxClose" aria-label="关闭预览">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+        <img id="lightboxImg" alt="题目大图预览" />
+      </div>
+
       <section class="chat-feed" id="chatFeed"></section>
 
       <!-- 滚动到底部按钮 -->
