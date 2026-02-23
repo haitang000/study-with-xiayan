@@ -138,11 +138,18 @@ function updateContextByUsage(usage) {
 }
 
 // ── Markdown 渲染 ──
-marked.use({ breaks: true, gfm: true });
+const markdownEngine = window.marked;
+const codeHighlighter = window.hljs;
+if (markdownEngine?.use) markdownEngine.use({ breaks: true, gfm: true });
 
 function renderRichContent(element, text) {
   if (!element) return;
-  element.innerHTML = marked.parse(text || "");
+  const source = String(text || "");
+  if (markdownEngine?.parse) {
+    element.innerHTML = markdownEngine.parse(source);
+  } else {
+    element.textContent = source;
+  }
   if (typeof window.renderMathInElement === "function") {
     window.renderMathInElement(element, {
       delimiters: [
@@ -153,7 +160,9 @@ function renderRichContent(element, text) {
       ignoredTags: ["script", "noscript", "style", "textarea", "pre", "code"],
     });
   }
-  element.querySelectorAll("pre code").forEach((el) => hljs.highlightElement(el));
+  if (codeHighlighter?.highlightElement) {
+    element.querySelectorAll("pre code").forEach((el) => codeHighlighter.highlightElement(el));
+  }
 }
 
 // ── 消息 & 头像 ──
@@ -537,7 +546,8 @@ async function streamToElement(msgBody, stream) {
       const gap = fullText.length - displayedText.length;
       const step = gap > 30 ? Math.ceil(gap / 5) : 1;
       displayedText = fullText.substring(0, displayedText.length + step);
-      msgBody.innerHTML = marked.parse(displayedText);
+      if (markdownEngine?.parse) msgBody.innerHTML = markdownEngine.parse(displayedText);
+      else msgBody.textContent = displayedText;
       chatFeed.scrollTop = chatFeed.scrollHeight;
       if (gap < 50) await new Promise((r) => setTimeout(r, 15));
     }
@@ -662,7 +672,7 @@ explainBtn.addEventListener("click", async () => {
     conversation.push({ role: "user", content: "我上传了一道题目图片，请你完整讲解。" });
     conversation.push({ role: "assistant", content: fullText });
     await summarizeToDraft("我上传了一道题目图片，请你完整讲解。", fullText);
-    updateCharacterBubble("讲解完成。你可以继续追问"为什么这么做"。");
+    updateCharacterBubble("讲解完成。你可以继续追问『为什么这么做』。");
     if (lastUsage) updateContextByUsage(lastUsage);
   } catch (error) {
     console.error("[explainBtn]", error);
