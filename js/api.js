@@ -167,8 +167,14 @@ export function createAssistantContentFilter() {
 function extractChunkText(data) {
   const delta = data?.choices?.[0]?.delta || {};
   if (typeof delta.content === "string") return delta.content;
+  if (typeof delta.reasoning_content === "string") return delta.reasoning_content;
   if (Array.isArray(delta.content)) {
     return delta.content.map((item) => (typeof item === "string" ? item : item?.text || "")).join("");
+  }
+  const message = data?.choices?.[0]?.message || {};
+  if (typeof message.content === "string") return message.content;
+  if (Array.isArray(message.content)) {
+    return message.content.map((item) => (typeof item === "string" ? item : item?.text || "")).join("");
   }
   return "";
 }
@@ -226,6 +232,14 @@ export async function* callModelStream(messages, configKey, options = {}) {
         throw new Error(parseApiError(errorData, `请求失败（HTTP ${response.status}）`));
       }
 
+      const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+      if (!contentType.includes("text/event-stream")) {
+        const data = await response.json().catch(() => ({}));
+        const content = extractChunkText(data);
+        if (content || data?.usage) yield { content, usage: data.usage };
+        return;
+      }
+
       const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
       let buffer = "";
@@ -238,8 +252,8 @@ export async function* callModelStream(messages, configKey, options = {}) {
         buffer = lines.pop();
         for (const line of lines) {
           const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith("data: ")) continue;
-          const dataStr = trimmed.slice(6);
+          if (!trimmed || !trimmed.startsWith("data:")) continue;
+          const dataStr = trimmed.slice(5).trim();
           if (dataStr === "[DONE]") return;
           try {
             const data = JSON.parse(dataStr);
