@@ -3,6 +3,7 @@
     "build": "node scripts/build-env.js"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "vercel": "^50.22.0"
   }
 }
