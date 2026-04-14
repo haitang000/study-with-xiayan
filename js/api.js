@@ -179,6 +179,12 @@ function extractChunkText(data) {
   return "";
 }
 
+function extractToolCalls(data) {
+  const fromMessage = data?.choices?.[0]?.message?.tool_calls;
+  if (Array.isArray(fromMessage) && fromMessage.length) return fromMessage;
+  return [];
+}
+
 function parseApiError(data, fallback) {
   if (data?.error?.message) return data.error.message;
   return fallback || "接口调用失败，请稍后重试。";
@@ -212,7 +218,10 @@ export async function* callModelStream(messages, configKey, options = {}) {
   if (requiresApiKey && !userApiKey)
     throw new Error("请先在设置中填写 API Key（或在 env.local.js 中配置对应的 API Key）");
 
-  const payload = { model: modelName, messages, stream: true };
+  const streamEnabled = options.stream !== false;
+  const payload = { model: modelName, messages, stream: streamEnabled };
+  if (Array.isArray(options.tools) && options.tools.length) payload.tools = options.tools;
+  if (options.toolChoice) payload.tool_choice = options.toolChoice;
   const headers = { "Content-Type": "application/json" };
   if (requiresApiKey && userApiKey) headers.Authorization = `Bearer ${userApiKey}`;
 
@@ -236,7 +245,8 @@ export async function* callModelStream(messages, configKey, options = {}) {
       if (!contentType.includes("text/event-stream")) {
         const data = await response.json().catch(() => ({}));
         const content = extractChunkText(data);
-        if (content || data?.usage) yield { content, usage: data.usage };
+        const toolCalls = extractToolCalls(data);
+        if (content || data?.usage || toolCalls.length) yield { content, usage: data.usage, toolCalls };
         return;
       }
 
