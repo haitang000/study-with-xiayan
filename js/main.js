@@ -65,6 +65,36 @@ let isBusy = false, sidebarCloseTimer = null, toastTimer = null;
 let lightboxCloseTimer = null;
 const conversation = [];
 const systemPromptReady = loadSystemPrompt();
+const MCQ_TOOL_NAME = "create_multiple_choice_question";
+const MCQ_TOOL_SCHEMA = [{
+  type: "function",
+  function: {
+    name: MCQ_TOOL_NAME,
+    description: "根据用户需求生成单项选择题。",
+    parameters: {
+      type: "object",
+      properties: {
+        stem: { type: "string", description: "题干" },
+        options: {
+          type: "array",
+          description: "选项列表，建议 4 个",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string", description: "选项标识，如 A/B/C/D" },
+              text: { type: "string", description: "选项内容" },
+            },
+            required: ["label", "text"],
+          },
+          minItems: 2,
+        },
+        answer: { type: "string", description: "正确答案的 label，如 A" },
+        explanation: { type: "string", description: "答案解析" },
+      },
+      required: ["stem", "options", "answer", "explanation"],
+    },
+  },
+}];
 
 // ── 移动端检测 ──
 function detectMobileLikeDevice() {
@@ -636,6 +666,51 @@ async function streamToElement(msgBody, stream) {
   return { fullText, lastUsage };
 }
 
+function shouldUseMcqFunctionCalling(query) {
+  const text = String(query || "");
+  return /选择题|单选题|出题|生成题目|题目练习/.test(text);
+}
+
+function normalizeMcqFromToolCall(toolCall) {
+  const argsText = toolCall?.function?.arguments || "{}";
+  let args = {};
+  try { args = JSON.parse(argsText); } catch { return null; }
+  const stem = String(args.stem || "").trim();
+  const explanation = String(args.explanation || "").trim();
+  const answer = String(args.answer || "").trim().toUpperCase();
+  const options = Array.isArray(args.options)
+    ? args.options.map((item, idx) => ({
+      label: String(item?.label || String.fromCharCode(65 + idx)).trim().toUpperCase(),
+      text: String(item?.text || "").trim(),
+    })).filter((item) => item.label && item.text)
+    : [];
+  if (!stem || !options.length || !answer || !explanation) return null;
+  return { stem, options, answer, explanation };
+}
+
+function renderMcqMarkdown(mcq) {
+  const optionLines = mcq.options.map((item) => `- ${item.label}. ${item.text}`).join("\n");
+  return `### 选择题\n\n**题干：** ${mcq.stem}\n\n${optionLines}\n\n**答案：** ${mcq.answer}\n\n**解析：** ${mcq.explanation}`;
+}
+
+async function generateMcqViaFunctionCalling(query) {
+  const messages = [
+    { role: "system", content: getSystemPrompt() },
+    { role: "user", content: `你是出题助手。用户需求：${query}\n请优先调用函数输出结构化选择题。` },
+  ];
+  const stream = callModelStream(messages, null, {
+    stream: false,
+    tools: MCQ_TOOL_SCHEMA,
+    toolChoice: { type: "function", function: { name: MCQ_TOOL_NAME } },
+  });
+  for await (const chunk of stream) {
+    const firstToolCall = Array.isArray(chunk.toolCalls) ? chunk.toolCalls[0] : null;
+    const mcq = normalizeMcqFromToolCall(firstToolCall);
+    if (mcq) return renderMcqMarkdown(mcq);
+  }
+  return "";
+}
+
 // ── 笔记摘要 ──
 async function summarizeToDraft(question, answer) {
   if (!draftInput || !answer?.trim()) return;
@@ -800,8 +875,19 @@ askForm.addEventListener("submit", async (e) => {
     await systemPromptReady;
     const modePrompt = MODE_INSTRUCTIONS[getCurrentMode()];
     const fullQuery = `${modePrompt}\n${PERSONA_REINFORCEMENT}\n${q}`;
-    const messages = [{ role: "system", content: getSystemPrompt() }, ...conversation, { role: "user", content: fullQuery }];
-    const { fullText, lastUsage } = await streamToElement(msgBody, callModelStream(messages));
+    let fullText = "";
+    let lastUsage = null;
+    if (shouldUseMcqFunctionCalling(q)) {
+      fullText = await generateMcqViaFunctionCalling(q);
+      if (fullText) renderRichContent(msgBody, fullText);
+      else {
+        const messages = [{ role: "system", content: getSystemPrompt() }, ...conversation, { role: "user", content: fullQuery }];
+        ({ fullText, lastUsage } = await streamToElement(msgBody, callModelStream(messages)));
+      }
+    } else {
+      const messages = [{ role: "system", content: getSystemPrompt() }, ...conversation, { role: "user", content: fullQuery }];
+      ({ fullText, lastUsage } = await streamToElement(msgBody, callModelStream(messages)));
+    }
     appendSessionMessage("assistant", fullText);
     summarizeSessionTitle(getCurrentSessionIdValue());
     conversation.push({ role: "user", content: q });
